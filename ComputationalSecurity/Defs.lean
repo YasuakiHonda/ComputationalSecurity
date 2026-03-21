@@ -69,18 +69,19 @@ noncomputable def ps
     the advantage |pa - ps| is at most ε.
 
     Here t bounds the adversary's complexity, α is the additional complexity
-    allowed for the simulator, and ε is the maximum distinguishing advantage. -/
+    allowed for the simulator, and ε : NNReal is the maximum distinguishing
+    advantage, consistent with the textbook where ε is a nonnegative real number. -/
 def SemanticallySecure
     (Enc : K → M → C)
     (Gen : PMF K)
-    (t α : ℕ) (ε : ENNReal) : Prop :=
+    (t α : ℕ) (ε : NNReal) : Prop :=
   ∀ (A1 : PMF (PMF M × (M → Bit) × (M → Bit → Bit) × St))
     (A2 : C → Bit → St → PMF Bit)
     (tA1 tA2 : ℕ),
     tA1 + tA2 ≤ t →
     ∃ (S : Bit → St → PMF Bit) (tS : ℕ),
       tS ≤ tA1 + tA2 + α ∧
-      |(pa Enc Gen A1 A2).toReal - (ps A1 S).toReal| ≤ ε.toReal
+      |(pa Enc Gen A1 A2).toReal - (ps A1 S).toReal| ≤ (ε : ℝ)
 
 -- ============================================================
 -- Definition 3.5: Indistinguishability
@@ -116,19 +117,23 @@ noncomputable def p1
 
 /-- Definition 3.5: (t, ε)-Indistinguishability.
     An encryption scheme (Enc, Gen) is (t, ε)-indistinguishable if
-    for every adversary (A1, A2) with combined complexity at most t,
+    for every adversary (A1, A2) with combined complexity at most t
+    that only outputs distinct plaintext pairs (m0 ≠ m1),
     the advantage |p0 - p1| in distinguishing encryptions of m0 and m1 is at most ε.
 
-    Here p0 is the probability that A2 outputs 1 when m0 is encrypted,
-    and p1 is the probability that A2 outputs 1 when m1 is encrypted. -/
+    The condition A1 (m0, m1, st) > 0 → m0 ≠ m1 formalizes that the
+    distinguishing game is only meaningful for distinct plaintexts, consistent
+    with the textbook where the adversary outputs two distinct messages.
+    ε : NNReal is consistent with the textbook where ε is a nonnegative real number. -/
 def Indistinguishable
     (Enc : K → M → C)
     (Gen : PMF K)
-    (t : ℕ) (ε : ENNReal) : Prop :=
+    (t : ℕ) (ε : NNReal) : Prop :=
   ∀ (A1 : PMF (M × M × St))
+    (_ : ∀ m0 m1 st, A1 (m0, m1, st) > 0 → m0 ≠ m1)
     (A2 : C → St → PMF Bit)
     (tA1 tA2 : ℕ),
     tA1 + tA2 ≤ t →
-    |(p0 Enc Gen A1 A2).toReal - (p1 Enc Gen A1 A2).toReal| ≤ ε.toReal
+    |(p0 Enc Gen A1 A2).toReal - (p1 Enc Gen A1 A2).toReal| ≤ (ε : ℝ)
 
 end ComputationalSecurity
