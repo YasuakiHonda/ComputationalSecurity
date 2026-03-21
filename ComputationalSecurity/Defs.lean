@@ -36,7 +36,8 @@ def correctness (Enc : K → M → C) (Dec : K → C → M) : Prop :=
     relation R : M → Bit → Bit, and state st.
     A key k is sampled from Gen, a plaintext m from mDist, and A2 receives
     the ciphertext Enc(k, m), the partial info h(m), and the state st,
-    then outputs a guess a : Bit. Success is measured by R(m, a) = 1. -/
+    then outputs a guess a : Bit. The returned value is the probability that R(m, a) = 1,
+    i.e., that A2 successfully computes the target function of m. -/
 noncomputable def pa
     (Enc : K → M → C)
     (Gen : PMF K)
@@ -52,7 +53,8 @@ noncomputable def pa
 /-- Success probability of simulator S without the ciphertext (ps in Def 3.4).
     S receives only the partial information h(m) : Bit and the state st,
     with no access to the ciphertext or the key.
-    Success is measured by R(m, s) = 1 where s : Bit is the simulator's output. -/
+    The returned value is the probability that R(m, s) = 1,
+    where s : Bit is the simulator's output. -/
 noncomputable def ps
     (A1 : PMF (PMF M × (M → Bit) × (M → Bit → Bit) × St))
     (S : Bit → St → PMF Bit) : ENNReal :=
@@ -64,13 +66,13 @@ noncomputable def ps
 
 /-- Definition 3.4: (t, α, ε)-Semantic Security.
     An encryption scheme (Enc, Gen) is (t, α, ε)-semantically secure if
-    for every adversary (A1, A2) with combined complexity at most t,
-    there exists a simulator S with complexity at most t + α such that
+    for every adversary (A1, A2) with combined complexity tA1 + tA2 ≤ t,
+    there exists a simulator S with complexity tS ≤ tA1 + tA2 + α such that
     the advantage |pa - ps| is at most ε.
 
-    Here t bounds the adversary's complexity, α is the additional complexity
-    allowed for the simulator, and ε : NNReal is the maximum distinguishing
-    advantage, consistent with the textbook where ε is a nonnegative real number. -/
+    Here t bounds the adversary's total complexity, α is the additional complexity
+    budget allowed for the simulator, and ε : NNReal is the maximum advantage,
+    consistent with the textbook where ε is a nonneg real number. -/
 def SemanticallySecure
     (Enc : K → M → C)
     (Gen : PMF K)
@@ -123,8 +125,8 @@ noncomputable def p1
 
     The condition A1 (m0, m1, st) > 0 → m0 ≠ m1 formalizes that the
     distinguishing game is only meaningful for distinct plaintexts, consistent
-    with the textbook where the adversary outputs two distinct messages.
-    ε : NNReal is consistent with the textbook where ε is a nonnegative real number. -/
+    with the textbook where the adversary is required to output two distinct messages.
+    ε : NNReal is consistent with the textbook where ε is a nonneg real number. -/
 def Indistinguishable
     (Enc : K → M → C)
     (Gen : PMF K)
