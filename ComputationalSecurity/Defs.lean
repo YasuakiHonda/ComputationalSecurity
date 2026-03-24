@@ -138,4 +138,23 @@ def Indistinguishable
     tA1 + tA2 ≤ t →
     |(p0 Enc Gen A1 A2).toReal - (p1 Enc Gen A1 A2).toReal| ≤ (ε : ℝ)
 
+/-- Definition 3.5 (variant without hne): (t, ε)-Indistinguishability without the
+    distinctness condition on plaintexts.
+    Unlike Indistinguishable, this variant places no restriction on A1:
+    the adversary may output pairs (m0, m1) with m0 = m1.
+    This variant is used in the proof of Theorem 3.2, where the constructed
+    adversary B1_ind uses a fixed m' and cannot guarantee m ≠ m' for all
+    support points of the plaintext distribution.
+    As argued in the proof of Theorem 3.1, the two definitions are equivalent:
+    any A1 achieving |p0 - p1| > ε > 0 must have m0 ≠ m1 on its support anyway. -/
+def Indistinguishable_without_hne
+    (Enc : K → M → C)
+    (Gen : PMF K)
+    (t : ℕ) (ε : NNReal) : Prop :=
+  ∀ (A1 : PMF (M × M × St))
+    (A2 : C → St → PMF Bit)
+    (tA1 tA2 : ℕ),
+    tA1 + tA2 ≤ t →
+    |(p0 Enc Gen A1 A2).toReal - (p1 Enc Gen A1 A2).toReal| ≤ (ε : ℝ)
+
 end ComputationalSecurity

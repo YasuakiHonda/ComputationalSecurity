@@ -49,6 +49,24 @@ lemma Pr_compl (p : PMF Bool) :
   apply ENNReal.eq_sub_of_add_eq' (by norm_num)
   simp only [mul_one, Bool.true_eq_false, ↓reduceIte, mul_zero, add_zero, h]
 
+
+/-- The expectation of a function bounded by 1 is itself bounded by 1.
+    This is a general version of the 'probability is at most 1' principle. -/
+lemma PMF.tsum_mul_le_one {α : Type*} (p : PMF α) (f : α → ENNReal) (hf : ∀ x, f x ≤ 1) :
+    (∑' x, p x * f x) ≤ 1 := by
+  calc (∑' x, p x * f x)
+    -- 各項において p x * f x ≤ p x * 1 = p x を使う
+    _ ≤ ∑' x, p x := by
+      apply ENNReal.tsum_le_tsum
+      exact fun a ↦ mul_le_of_le_one_right' (hf a)
+    -- PMF の定義より ∑' x, p x = 1
+    _ = 1         := p.tsum_coe
+
+/-- A useful corollary: the expectation of any bounded function is never top (infinity). -/
+lemma PMF.tsum_mul_ne_top {α : Type*} (p : PMF α) (f : α → ENNReal) (hf : ∀ x, f x ≤ 1) :
+    (∑' x, p x * f x) ≠ ⊤ :=
+  ne_top_of_le_ne_top (by norm_num) (p.tsum_mul_le_one f hf)
+
 /--
 Algebraic identity used in the Guessing Lemma proof.
 Rewrites the expression `1/2 * (1 - A) + 1/2 * B`
