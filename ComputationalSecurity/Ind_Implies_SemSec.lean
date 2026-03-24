@@ -164,7 +164,7 @@ lemma p1_eq_ps
 theorem indistinguishable_implies_semantically_secure
     (Enc : K → M → C) (Gen : PMF K)
     (t tM th tR tGen tEnc : ℕ) (ε : NNReal)
-    (hind : Indistinguishable_without_hne (St := St_B M St)
+    (hind : Indistinguishable (St := St_B M St)
               Enc Gen (t + tM + th + tR) ε) :
     SemanticallySecure (St := St) Enc Gen t (tGen + tEnc) ε := by
   -- Introduce A1, A2, complexity bounds from SemanticallySecure

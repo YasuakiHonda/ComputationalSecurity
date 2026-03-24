@@ -119,35 +119,10 @@ noncomputable def p1
 
 /-- Definition 3.5: (t, ε)-Indistinguishability.
     An encryption scheme (Enc, Gen) is (t, ε)-indistinguishable if
-    for every adversary (A1, A2) with combined complexity at most t
-    that only outputs distinct plaintext pairs (m0 ≠ m1),
+    for every adversary (A1, A2) with combined complexity at most t,
     the advantage |p0 - p1| in distinguishing encryptions of m0 and m1 is at most ε.
-
-    The condition A1 (m0, m1, st) > 0 → m0 ≠ m1 formalizes that the
-    distinguishing game is only meaningful for distinct plaintexts, consistent
-    with the textbook where the adversary is required to output two distinct messages.
-    ε : NNReal is consistent with the textbook where ε is a nonneg real number. -/
+-/
 def Indistinguishable
-    (Enc : K → M → C)
-    (Gen : PMF K)
-    (t : ℕ) (ε : NNReal) : Prop :=
-  ∀ (A1 : PMF (M × M × St))
-    (_ : ∀ m0 m1 st, A1 (m0, m1, st) > 0 → m0 ≠ m1)
-    (A2 : C → St → PMF Bit)
-    (tA1 tA2 : ℕ),
-    tA1 + tA2 ≤ t →
-    |(p0 Enc Gen A1 A2).toReal - (p1 Enc Gen A1 A2).toReal| ≤ (ε : ℝ)
-
-/-- Definition 3.5 (variant without hne): (t, ε)-Indistinguishability without the
-    distinctness condition on plaintexts.
-    Unlike Indistinguishable, this variant places no restriction on A1:
-    the adversary may output pairs (m0, m1) with m0 = m1.
-    This variant is used in the proof of Theorem 3.2, where the constructed
-    adversary B1_ind uses a fixed m' and cannot guarantee m ≠ m' for all
-    support points of the plaintext distribution.
-    As argued in the proof of Theorem 3.1, the two definitions are equivalent:
-    any A1 achieving |p0 - p1| > ε > 0 must have m0 ≠ m1 on its support anyway. -/
-def Indistinguishable_without_hne
     (Enc : K → M → C)
     (Gen : PMF K)
     (t : ℕ) (ε : NNReal) : Prop :=
