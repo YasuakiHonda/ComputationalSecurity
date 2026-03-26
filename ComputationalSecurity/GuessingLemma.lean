@@ -1,6 +1,27 @@
 /-
-  Formalization of Lemma 3.1 (Guessing Lemma)
-  Dependency: Defs_bit.lean
+  Formalization of Lemma 3.1 (Guessing Lemma).
+  Reference: Textbook Chapter 3, p. 33.
+
+  Given a distinguisher A that tells apart two distributions X 0 and X 1,
+  the Guessing Lemma constructs an algorithm B that correctly identifies which
+  distribution a sample came from with probability strictly greater than 1/2.
+
+  More precisely, if
+    |Pr[a ← A(X 1); a = 1] - Pr[a ← A(X 0); a = 1]| > ε
+  then there exists B such that
+    Pr[b ← randomBit; x ← X b; a ← B x; a = b] > 1/2 * (1 + ε).
+
+  The proof splits into two cases based on the sign of the difference:
+    - Case 1: Pr[A on X 1] - Pr[A on X 0] > ε  →  use A directly as B.
+    - Case 2: Pr[A on X 0] - Pr[A on X 1] > ε  →  use flipA A (the bit-flipped A) as B.
+
+  File organization:
+    - guessing_lemma_case1: Case 1 (A used directly).
+    - flipA, Pr_flip: definition of the flipped adversary and its probability identity.
+    - guessing_lemma_case2: Case 2 (flipA A used).
+    - guessing_lemma_abs: Combined absolute-value version used in practice.
+
+  Authors: Yasuaki Honda
 -/
 
 import ComputationalSecurity.ProbabilityUtils
@@ -122,6 +143,7 @@ outputting 0 or 1, if
   Pr[x ← X 0; a ← A x; a == 1] - Pr[x ← X 1; a ← A x; a == 1] > ε
 then there exists B such that
   Pr[b ← randomBit; x ← X b; a ← B x; a == b] > 1/2 * (1 + ε).
+Note: B = flipA A, not A itself (correcting the textbook).
 -/
 lemma guessing_lemma_case2 {α : Type}
     (A : α → PMF Bit)
