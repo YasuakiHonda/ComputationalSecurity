@@ -1,11 +1,10 @@
 /-
-  Formalization of Theorem 3.2 (textbook Chapter 3, pp.36-37):
-  (t + tM + th + tR, ε)-Indistinguishability implies
+  Formalization of Theorem 3.2: (t + tM + th + tR, ε)-Indistinguishability implies
   (t, tGen + tEnc, ε)-Semantic Security.
+  Reference: Textbook Chapter 3, pp. 36-37.
 
-  ----------------------------------------------------------------
-  Proof structure (following textbook pp.36-37):
-  ----------------------------------------------------------------
+  Proof structure (following textbook pp. 36-37):
+
   Step 1: Construct indistinguishability adversary (B1_ind, B2_ind) from (A1, A2):
             B1_ind: sample (mDist, h, R, st) ← A1, m ← mDist,
                     output (m0 = m, m1 = default, stB = (m, h(m), R, st))
@@ -18,12 +17,10 @@
             This matches the textbook simulator on p.37.
   Step 3: Show p0(B1_ind A1, B2_ind A2) = pa(A1, A2)  [textbook eq on p.37]
   Step 4: Show p1(B1_ind A1, B2_ind A2) = ps(A1, S_sim)  [textbook eq on p.37]
-  Step 5: Apply Indistinguishable_without_hne to (B1_ind A1, B2_ind A2):
+  Step 5: Apply Indistinguishable to (B1_ind A1, B2_ind A2):
             |p0 - p1| ≤ ε, hence |pa - ps| ≤ ε. Done.
 
-  ----------------------------------------------------------------
   Key type design:
-  ----------------------------------------------------------------
   - A1, A2, S operate on state type St  (semantic security world)
   - B1_ind, B2_ind operate on St_B M St (indistinguishability world)
   - St_B M St = M × Bit × (M → Bit → Bit) × St packages
@@ -31,18 +28,14 @@
   - S_sim has type Bit → St → PMF Bit (same as any simulator for A2)
   - m' = default throughout (B1_ind and S_sim share the same fixed plaintext),
     which requires [Inhabited M]
-  - Indistinguishable_without_hne is used instead of Indistinguishable
-    so that B1_ind (which may output m = default) can be applied directly.
-    The two definitions are equivalent: any adversary achieving |p0-p1| > ε > 0
-    must have m0 ≠ m1 on its support anyway.
+  - Indistinguishable is used directly (no distinctness condition on plaintexts),
+    since B1_ind may output m = default.
 
-  ----------------------------------------------------------------
   File organization:
-  ----------------------------------------------------------------
-    Section 1 (def B1_ind, B2_ind): Construction of indistinguishability adversaries
-    Section 2 (def S_sim):          Construction of simulator
-    Section 3 (lemmas):             p0_eq_pa, p1_eq_ps
-    Section 4 (theorem):            Main theorem assembling Steps 1–5
+    Section 1: Construction of indistinguishability adversaries (B1_ind, B2_ind)
+    Section 2: Construction of simulator (S_sim)
+    Section 3: Key equalities (p0_eq_pa, p1_eq_ps)
+    Section 4: Main theorem assembling Steps 1-5
 
   Authors: Yasuaki Honda
 -/
@@ -146,7 +139,7 @@ lemma p1_eq_ps
 /-- Theorem 3.2: (t + tM + th + tR, ε)-Indistinguishability implies
     (t, tGen + tEnc, ε)-Semantic Security.
 
-    Uses Indistinguishable_without_hne (no distinctness condition on plaintexts)
+    Uses Indistinguishable (no distinctness condition on plaintexts)
     so that B1_ind (which outputs m1 = default regardless of m) can be applied
     directly. The [Inhabited M] hypothesis provides the fixed plaintext default
     shared between B1_ind and S_sim.

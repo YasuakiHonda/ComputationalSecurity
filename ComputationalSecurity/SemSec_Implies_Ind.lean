@@ -6,12 +6,21 @@
 
   Logic:
   The proof follows a direct "Advantage Equality" approach rather than the traditional
-  reduction through a guessing lemma. It establishes the identity:
+  reduction through a guessing lemma. It establishes the signed identity:
+    pa - ps = 1/2 * (p1 - p0)
+  and hence the absolute-value version:
     |pa - ps| = 1/2 * |p1 - p0|
   This equality is proved by decomposing the global probabilities into local success
   probabilities for each message pair (m0, m1) in the support of the message distribution.
   Crucially, this approach handles the case where m0 = m1 naturally (both sides become zero),
   eliminating the need for the distinctness constraint (hne) on the adversary's output.
+
+  This file is organized into five sections:
+    Section 1: Construction of adversaries B1 and B2 for the semantic security game.
+    Section 2: Local probability definitions (local_pa, local_ps, p_local).
+    Section 3: Evaluation lemmas (local_pa_eval, local_ps_eval).
+    Section 4: Global bridging lemmas relating pa, ps, p0, p1 to their local summations.
+    Section 5: Advantage equality (signed and absolute) and the final theorem.
 
   Authors: Yasuaki Honda, assisted by AI
 -/
@@ -23,7 +32,10 @@ namespace ComputationalSecurity
 
 open PMF
 
-variable {M C K St : Type} [DecidableEq M] [Fintype M] [Fintype C] [Fintype St]
+-- Base variable declaration: used throughout Sections 1-4.
+-- [Fintype M], [Fintype C], [Fintype St] are added before Section 5,
+-- where tsum_fintype is needed for the global advantage equality.
+variable {M C K St : Type} [DecidableEq M]
 
 -- ============================================================
 -- Section 1: Construction of (B1, B2)
@@ -31,7 +43,9 @@ variable {M C K St : Type} [DecidableEq M] [Fintype M] [Fintype C] [Fintype St]
 
 /-- Semantic security adversary B1 constructed from an indistinguishability adversary A1.
     It picks m0 or m1 with probability 1/2 and defines a relation R that is satisfied
-    only if the adversary correctly identifies which message was chosen. -/
+    only if the adversary correctly identifies which message was chosen.
+    The partial information function h is set to the constant zero function,
+    providing no side information to A2 beyond what the ciphertext reveals. -/
 noncomputable def B1 (A1 : PMF (M × M × St)) :
     PMF (PMF M × (M → Bit) × (M → Bit → Bit) × St) := do
   let (m0, m1, st) ← A1
@@ -75,7 +89,8 @@ noncomputable def local_ps (S : Bit → St → PMF Bit) (m0 m1 : M) (st : St) : 
 -- ============================================================
 
 /-- Evaluation of local_ps. If m0 = m1, success is certain (1).
-    Otherwise, success probability is exactly 1/2 as S has no information about the choice. -/
+    Otherwise, success probability is exactly 1/2: S only observes h(m) = 0 and st,
+    and has no information about which message was actually chosen. -/
 lemma local_ps_eval (m0 m1 : M) (st : St) (S : Bit → St → PMF Bit) :
     local_ps S m0 m1 st = if m0 = m1 then 1 else 1 / 2 := by
   unfold local_ps
@@ -109,14 +124,15 @@ lemma local_ps_eval (m0 m1 : M) (st : St) (S : Bit → St → PMF Bit) :
         pure_apply, left_eq_ite_iff, not_or, not_and, one_ne_zero, imp_false, Classical.not_imp,
         Decidable.not_not, mul_ite, mul_one, mul_zero, tsum_fintype, Fin.sum_univ_two,
         not_true_eq_false, zero_ne_one, and_false, not_false_eq_true, implies_true, and_true,
-        forall_const, Matrix.cons_val_zero, ↓reduceIte, Matrix.cons_val_one, Matrix.cons_val_fin_one,
-        one_div, hm01, hne', add_zero, zero_add]
+        forall_const, Matrix.cons_val_zero, ↓reduceIte, Matrix.cons_val_one,
+        Matrix.cons_val_fin_one, one_div, hm01, hne', add_zero, zero_add]
       rw [← mul_add, hS, mul_one]
     exact inner_eq_half
 
 /-- Evaluation of local_pa. If m0 = m1, success is certain (1).
     Otherwise, it is 1/2 * (Pr[A2=0|m0] + Pr[A2=1|m1]). -/
-lemma local_pa_eval (Enc : K → M → C) (Gen : PMF K) (A2 : C → St → PMF Bit) (m0 m1 : M) (st : St) :
+lemma local_pa_eval (Enc : K → M → C) (Gen : PMF K) (A2 : C → St → PMF Bit)
+    (m0 m1 : M) (st : St) :
     local_pa Enc Gen A2 m0 m1 st = if m0 = m1 then 1
       else 1 / 2 * (1 - (Gen.bind (fun k => A2 (Enc k m0) st)) 1)
          + 1 / 2 * (Gen.bind (fun k => A2 (Enc k m1) st)) 1 := by
@@ -205,22 +221,30 @@ lemma ps_eq_tsum (A1 : PMF (M × M × St)) (S : Bit → St → PMF Bit) :
     and_false, or_false, one_ne_zero, false_or]
 
 /-- Bridge between global p0 and local p_local at m0. -/
-lemma p0_eq_tsum (Enc : K → M → C) (Gen : PMF K) (A1 : PMF (M × M × St)) (A2 : C → St → PMF Bit) :
+lemma p0_eq_tsum (Enc : K → M → C) (Gen : PMF K)
+    (A1 : PMF (M × M × St)) (A2 : C → St → PMF Bit) :
     p0 Enc Gen A1 A2 = ∑' x, A1 x * p_local Enc Gen A2 x.1 x.2.2 := by
   unfold p0 p_local; apply tsum_congr; intro ⟨m0, m1, st⟩; rw [bind_apply]; congr
 
 /-- Bridge between global p1 and local p_local at m1. -/
-lemma p1_eq_tsum (Enc : K → M → C) (Gen : PMF K) (A1 : PMF (M × M × St)) (A2 : C → St → PMF Bit) :
+lemma p1_eq_tsum (Enc : K → M → C) (Gen : PMF K)
+    (A1 : PMF (M × M × St)) (A2 : C → St → PMF Bit) :
     p1 Enc Gen A1 A2 = ∑' x, A1 x * p_local Enc Gen A2 x.2.1 x.2.2 := by
   unfold p1 p_local; apply tsum_congr; intro ⟨m0, m1, st⟩; rw [bind_apply]; congr
 
 -- ============================================================
 -- Section 5: Advantage Equality and Final Theorem
+-- [Fintype M], [Fintype C], [Fintype St] are introduced here,
+-- as they are first needed by pa_sub_ps_eq_half_dist (via tsum_fintype).
 -- ============================================================
 
+variable [Fintype M] [Fintype C] [Fintype St]
+
 /-- Identity relating Semantic Security advantage and Indistinguishability advantage at each point.
-    If m0 = m1, the difference is 0 - 0 = 0.
-    Otherwise, it is (1/2 + 1/2*(p1-p0)) - 1/2 = 1/2*(p1-p0). -/
+    Here p_local Enc Gen A2 m st denotes Pr[A2 outputs 1 | m is encrypted].
+    If m0 = m1, both local_pa and local_ps equal 1, so the difference is 0.
+    If m0 ≠ m1, local_pa = 1/2*(1 - p_local m0) + 1/2*p_local m1 and local_ps = 1/2,
+    giving local_pa - local_ps = 1/2*(p_local m1 - p_local m0). -/
 lemma local_diff_eq (Enc : K → M → C) (Gen : PMF K)
     (A2 : C → St → PMF Bit) (S : Bit → St → PMF Bit) (m0 m1 : M) (st : St) :
     (local_pa Enc Gen A2 m0 m1 st).toReal - (local_ps S m0 m1 st).toReal =
@@ -239,7 +263,8 @@ lemma local_diff_eq (Enc : K → M → C) (Gen : PMF K)
     rw [h_pa, h_ps]
     unfold p_local
     rw [ENNReal.toReal_add]
-    · simp only [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_ofNat, Fin.isValue, one_div, bind_apply]
+    · simp only [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_ofNat, Fin.isValue,
+        one_div, bind_apply]
       rw [ENNReal.toReal_sub_of_le]
       · rw [ENNReal.toReal_one]; ring
       · apply PMF.tsum_mul_le_one; exact fun x ↦ coe_le_one (A2 (Enc x m0) st) 1
@@ -280,7 +305,16 @@ lemma abs_pa_sub_ps_eq_half_dist (Enc : K → M → C) (Gen : PMF K)
   rw [abs_mul, abs_of_nonneg (by norm_num : (0 : ℝ) ≤ 1/2)]
 
 /-- Theorem 3.1: (t, α, ε/2)-Semantic Security implies (t, ε)-Indistinguishability.
-    Final proof assembling the Advantage Equality with the definition of Semantic Security. -/
+    Final proof assembling the Advantage Equality with the definition of Semantic Security.
+
+    Parameters:
+    - t  : complexity budget for the indistinguishability adversary (A1, A2)
+    - α  : complexity budget for key generation and encryption (tGen + tEnc)
+    - ε  : distinguishing advantage bound (the hypothesis gives ε/2 for semantic security)
+
+    The adversaries B1, B2 constructed in Section 1 serve as the semantic security
+    adversary. The Advantage Equality (abs_pa_sub_ps_eq_half_dist) converts the
+    semantic security bound ε/2 into the indistinguishability bound ε. -/
 theorem semantic_security_implies_indistinguishable
     (Enc : K → M → C) (Gen : PMF K) (t α : ℕ) (ε : NNReal)
     (hss : SemanticallySecure (St := St) Enc Gen t α (ε / 2)) :
