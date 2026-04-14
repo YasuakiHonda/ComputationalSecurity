@@ -1,22 +1,49 @@
 # ComputationalSecurity
 
-A Lean 4 + Mathlib 4 formalization of the equivalence between **Semantic Security** and **Indistinguishability** for symmetric encryption schemes.
+A Lean 4 + Mathlib 4 formalization of computational security for symmetric encryption,
+covering the equivalence between **Semantic Security** and **Indistinguishability** (Chapter 3),
+and **Pseudorandomness** including computational indistinguishability of distributions,
+the Hybrid Argument, and security under PRG-based key generation (Chapter 4).
 
-Based on: Yasunaga, *Computational Security* (textbook), Chapter 3.
+Based on: Yasunaga, *Computational Security* (textbook), Chapters 3 and 4.
 
 ## What This Project Proves
 
-The central result is the equivalence of two definitions of security for symmetric encryption:
+### Chapter 3: Semantic Security and Indistinguishability
 
-- **Definition 3.4 — Semantic Security**: No efficient adversary can compute any partial function of a plaintext significantly better with the ciphertext than without it.
-- **Definition 3.5 — Indistinguishability**: No efficient adversary can distinguish the encryption of two chosen plaintexts.
+The project formalizes two definitions of security for symmetric encryption and
+proves their equivalence:
 
-The project formalizes both directions of the equivalence:
+- **Definition 3.4 — Semantic Security**: No efficient adversary can compute any partial
+  function of a plaintext significantly better with the ciphertext than without it.
+- **Definition 3.5 — Indistinguishability**: No efficient adversary can distinguish the
+  encryption of two chosen plaintexts.
 
 - **Theorem 3.1** (`SemSec_Implies_Ind.lean`): (t, α, ε/2)-Semantic Security ⟹ (t, ε)-Indistinguishability
 - **Theorem 3.2** (`Ind_Implies_SemSec.lean`): (t, ε)-Indistinguishability ⟹ (t, α, ε)-Semantic Security
 
 Both theorems are fully proved with no `sorry`.
+
+### Chapter 4: Pseudorandomness
+
+- **Definition 4.1 — Computational Indistinguishability of Distributions** (`DistInd.lean`):
+  Two distributions X and Y are (t, ε)-indistinguishable if no efficient distinguisher
+  can tell them apart with advantage greater than ε.
+- **Proposition 4.1 — Closure** (`DistInd.lean`): Computational indistinguishability is
+  preserved under efficient computation (if X ≈ Y then f(X) ≈ f(Y)).
+- **Hybrid Argument** (`DistInd.lean`): Formalization of the hybrid lemma and transitivity
+  of indistinguishability.
+- **Definitions 4.3, 4.4 — Pseudorandom Distribution and PRG** (`DistInd.lean`).
+- **Security Transfer Theorem** (`ShortKey_CompSec.lean`): If an encryption scheme is
+  perfectly secret under a uniform key, replacing the key with the output of a PRG
+  yields a computationally secure scheme.
+- **OTP + PRG Security** (`ShortKey_CompSec.lean`): The one-time pad with a PRG key is
+  computationally secure (`OTP_PRG_fixed_security`).
+- **Equivalence of Fixed-Message and Adversarial Indistinguishability**
+  (`ShortKey_CompSec.lean`): `FixedMessageIndistinguishable ↔ Indistinguishable`
+  for all state types `St`.
+
+All results are fully proved with no `sorry`.
 
 ## Build
 
@@ -39,7 +66,9 @@ ComputationalSecurity/
     ├── Defs.lean                     # Core definitions (Def 3.4, 3.5)
     ├── GuessingLemma.lean            # Lemma 3.1 (Guessing Lemma)
     ├── SemSec_Implies_Ind.lean       # Theorem 3.1
-    └── Ind_Implies_SemSec.lean       # Theorem 3.2
+    ├── Ind_Implies_SemSec.lean       # Theorem 3.2
+    ├── DistInd.lean                  # Chapter 4: Def 4.1, Prop 4.1, Hybrid Argument, PRG
+    └── ShortKey_CompSec.lean         # OTP, Security Transfer, FixedMessageIndistinguishable
 ```
 
 ## File Descriptions
@@ -76,6 +105,33 @@ This is established by decomposing global probabilities into per-sample local pr
 ### `Ind_Implies_SemSec.lean`
 Proof of Theorem 3.2. Constructs an indistinguishability adversary `(B1_ind, B2_ind)` from a semantic security adversary `(A1, A2)`, and a simulator `S_sim` that encrypts a fixed default plaintext. The state type `St_B M St = M × Bit × (M → Bit → Bit) × St` packages the semantic security state for use inside the indistinguishability game. Uses `Indistinguishable` directly (no distinctness condition on plaintexts), since `B1_ind` may output `m = default`.
 
+### `DistInd.lean`
+Formalizes the core concepts of Chapter 4.
+
+- `PrDX_one`: the probability that a distinguisher outputs 1 on a sample from distribution X.
+- `DistIndistinguishable`: Definition 4.1, (t, ε)-computational indistinguishability of distributions.
+- `closure` (Prop. 4.1): indistinguishability is preserved under efficient computation;
+  if X ≈ Y then `(X >>= A) ≈ (Y >>= A)`.
+- `hybrid_sum_inequality`, `hybrid_lemma`: the Hybrid Argument — if the total distance
+  between X₀ and Xₗ exceeds ε, some adjacent pair Xᵢ and Xᵢ₊₁ has distance > ε/l.
+- `transitivity`: indistinguishability is transitive via the hybrid argument.
+- `U`: the uniform distribution over `BitVec n`.
+- `IsPseudorandom`, `IsPRG`: Definitions 4.3 and 4.4.
+
+### `ShortKey_CompSec.lean`
+Definitions and theorems connecting perfect secrecy, PRGs, and computational security.
+
+- `Enc_dist`: the ciphertext distribution induced by encrypting a fixed message under a random key.
+- `ind_perfect_secrecy`: indistinguishability-based definition of perfect secrecy.
+- `OTP_Enc`, `OTP_Dec`, `OTP_Gen`, `OTP_is_ind_perfectly_secret`: the one-time pad and its perfect secrecy proof.
+- `security_transfer`: if `Enc` is perfectly secret under `U m`, replacing the key with
+  a PRG `G` yields `DistIndistinguishable` ciphertext distributions (generalization of Prop. 4.4).
+- `FixedMessageIndistinguishable`: the per-message-pair version of `Indistinguishable`.
+- `OTP_PRG_fixed_security`: the OTP with a PRG key satisfies `FixedMessageIndistinguishable`.
+- `indistinguishability_equivalence`: `FixedMessageIndistinguishable ↔ Indistinguishable`
+  for all state types `St`. Proved via an expectation argument (forward) and a point-mass
+  reduction with `St = Unit` (reverse).
+
 ## Design Choices
 
 | Choice | Rationale |
@@ -84,7 +140,7 @@ Proof of Theorem 3.2. Constructs an indistinguishability adversary `(B1_ind, B2_
 | `ENNReal` for probabilities | Native type for Mathlib's `PMF`; `.toReal` used at inequality boundaries |
 | `St` type parameter for adversary state | Enables stateful adversaries without fixing a concrete state type |
 | `NNReal` for advantage bound `ε` | Matches textbook (ε ≥ 0); simplifies inequality reasoning |
-| No `hne` (m0 ≠ m1) in `Indistinguishable` | Eliminated by the Advantage Equality approach in Thm 3.1, and by using a default plaintext in Thm 3.2 |
+| No `hne` (m0 ≠ m1) in `Indistinguishable` | Eliminated by the Advantage Equality approach in Thm 3.1, and by using a default plaintext in Thm 3.2. All Chapter 4 results also work without this condition. |
 
 ## Authors
 

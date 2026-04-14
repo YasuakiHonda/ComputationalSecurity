@@ -1,5 +1,7 @@
 import ComputationalSecurity.ProbabilityUtils
 import ComputationalSecurity.GuessingLemma
 import ComputationalSecurity.Defs
+import ComputationalSecurity.DistInd
 import ComputationalSecurity.SemSec_Implies_Ind
 import ComputationalSecurity.Ind_Implies_SemSec
+import ComputationalSecurity.ShortKey_CompSec
