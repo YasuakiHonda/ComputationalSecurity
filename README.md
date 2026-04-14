@@ -50,8 +50,7 @@ All results are fully proved with no `sorry`.
 Requires [elan](https://github.com/leanprover/elan) and an internet connection to download Mathlib.
 
 ```
-lake update
-lake build
+lake clean; lake update; lake exe cache get; lake build
 ```
 
 Toolchain: `leanprover/lean4:v4.29.0-rc4`, Mathlib `v4.29.0-rc4`.
