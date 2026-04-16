@@ -89,7 +89,7 @@ Adversary state is parameterized by a type variable `St`, allowing stateful adve
 Formalization of Lemma 3.1. Given a distinguisher `A` that tells apart two distributions `X 0` and `X 1`, the lemma constructs a guesser that correctly identifies which distribution a sample came from with probability greater than 1/2.
 
 - `guessing_lemma_case1`: When `Pr[A=1|X 1] - Pr[A=1|X 0] > ε`, the original `A` is used as the guesser.
-- `guessing_lemma_case2`: When `Pr[A=1|X 0] - Pr[A=1|X 1] > ε`, the flipped adversary `flipA A` is used instead. This resolves an ambiguity in the textbook, which uses the same algorithm `A` for both cases.
+- `guessing_lemma_case2`: When `Pr[A=1|X 0] - Pr[A=1|X 1] > ε`, the flipped adversary `flipA A` is used instead. 
 - `guessing_lemma_abs`: The combined absolute-value version used in practice.
 
 ### `SemSec_Implies_Ind.lean`
@@ -139,7 +139,7 @@ Definitions and theorems connecting perfect secrecy, PRGs, and computational sec
 | `ENNReal` for probabilities | Native type for Mathlib's `PMF`; `.toReal` used at inequality boundaries |
 | `St` type parameter for adversary state | Enables stateful adversaries without fixing a concrete state type |
 | `NNReal` for advantage bound `ε` | Matches textbook (ε ≥ 0); simplifies inequality reasoning |
-| No `hne` (m0 ≠ m1) in `Indistinguishable` | Eliminated by the Advantage Equality approach in Thm 3.1, and by using a default plaintext in Thm 3.2. All Chapter 4 results also work without this condition. |
+
 
 ## Authors
 
