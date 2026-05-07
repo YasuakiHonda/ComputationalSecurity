@@ -35,10 +35,14 @@ Both theorems are fully proved with no `sorry`.
   of indistinguishability.
 - **Definitions 4.3, 4.4 — Pseudorandom Distribution and PRG** (`DistInd.lean`).
 - **Security Transfer Theorem** (`ShortKey_CompSec.lean`): If an encryption scheme is
-  perfectly secret under a uniform key, replacing the key with the output of a PRG
-  yields a computationally secure scheme.
-- **OTP + PRG Security** (`ShortKey_CompSec.lean`): The one-time pad with a PRG key is
-  computationally secure (`OTP_PRG_fixed_security`).
+  perfectly secret under a uniform key, replacing the key with the output of a PRG yields
+  computationally indistinguishable ciphertext distributions. Proved via the Hybrid Argument
+  with a 2-step hybrid sequence.
+- **Indistinguishability from Perfect Secrecy + PRG** (`ShortKey_CompSec.lean`):
+  `IndPS_PRG_implies_Computational_Indistinguishability` — perfect secrecy under `U m`
+  plus a PRG implies `Indistinguishable` (Definition 3.5) for any state type.
+- **OTP + PRG Security** (`ShortKey_CompSec.lean`): `OTP_PRG_implies_Computational_Indistinguishability`
+  — the one-time pad with a PRG key satisfies `Indistinguishable` (Definition 3.5).
 - **Equivalence of Fixed-Message and Adversarial Indistinguishability**
   (`ShortKey_CompSec.lean`): `FixedMessageIndistinguishable ↔ Indistinguishable`
   for all state types `St`.
@@ -89,7 +93,7 @@ Adversary state is parameterized by a type variable `St`, allowing stateful adve
 Formalization of Lemma 3.1. Given a distinguisher `A` that tells apart two distributions `X 0` and `X 1`, the lemma constructs a guesser that correctly identifies which distribution a sample came from with probability greater than 1/2.
 
 - `guessing_lemma_case1`: When `Pr[A=1|X 1] - Pr[A=1|X 0] > ε`, the original `A` is used as the guesser.
-- `guessing_lemma_case2`: When `Pr[A=1|X 0] - Pr[A=1|X 1] > ε`, the flipped adversary `flipA A` is used instead. 
+- `guessing_lemma_case2`: When `Pr[A=1|X 0] - Pr[A=1|X 1] > ε`, the flipped adversary `flipA A` is used instead.
 - `guessing_lemma_abs`: The combined absolute-value version used in practice.
 
 ### `SemSec_Implies_Ind.lean`
@@ -109,6 +113,7 @@ Formalizes the core concepts of Chapter 4.
 
 - `PrDX_one`: the probability that a distinguisher outputs 1 on a sample from distribution X.
 - `DistIndistinguishable`: Definition 4.1, (t, ε)-computational indistinguishability of distributions.
+- `DistIndistinguishable_comm`: symmetry — X ≈ Y implies Y ≈ X.
 - `closure` (Prop. 4.1): indistinguishability is preserved under efficient computation;
   if X ≈ Y then `(X >>= A) ≈ (Y >>= A)`.
 - `hybrid_sum_inequality`, `hybrid_lemma`: the Hybrid Argument — if the total distance
@@ -122,14 +127,20 @@ Definitions and theorems connecting perfect secrecy, PRGs, and computational sec
 
 - `Enc_dist`: the ciphertext distribution induced by encrypting a fixed message under a random key.
 - `ind_perfect_secrecy`: indistinguishability-based definition of perfect secrecy.
-- `OTP_Enc`, `OTP_Dec`, `OTP_Gen`, `OTP_is_ind_perfectly_secret`: the one-time pad and its perfect secrecy proof.
-- `security_transfer`: if `Enc` is perfectly secret under `U m`, replacing the key with
-  a PRG `G` yields `DistIndistinguishable` ciphertext distributions (generalization of Prop. 4.4).
+- `security_transfer`: if `Enc` is perfectly secret under `U m`, replacing the key with a PRG `G`
+  yields `DistIndistinguishable` ciphertext distributions. Proved via the Hybrid Argument
+  (`transitivity` with a 2-step hybrid sequence P0 ≈ Q0 = Q1 ≈ P1).
 - `FixedMessageIndistinguishable`: the per-message-pair version of `Indistinguishable`.
-- `OTP_PRG_fixed_security`: the OTP with a PRG key satisfies `FixedMessageIndistinguishable`.
 - `indistinguishability_equivalence`: `FixedMessageIndistinguishable ↔ Indistinguishable`
   for all state types `St`. Proved via an expectation argument (forward) and a point-mass
   reduction with `St = Unit` (reverse).
+- `IndPS_PRG_implies_Computational_Indistinguishability`: if `Enc` achieves `ind_perfect_secrecy`
+  under `U m` and `G` is a PRG, then the scheme with key `G(s)` satisfies `Indistinguishable`
+  (Definition 3.5). Derived from `security_transfer` and `indistinguishability_equivalence`.
+- `OTP_Enc`, `OTP_Dec`, `OTP_Gen`, `OTP_is_ind_perfectly_secret`: the one-time pad and its
+  perfect secrecy proof.
+- `OTP_PRG_implies_Computational_Indistinguishability`: the OTP with a PRG key satisfies
+  `Indistinguishable` (Definition 3.5). Derived from `IndPS_PRG_implies_Computational_Indistinguishability`.
 
 ## Design Choices
 
@@ -139,7 +150,6 @@ Definitions and theorems connecting perfect secrecy, PRGs, and computational sec
 | `ENNReal` for probabilities | Native type for Mathlib's `PMF`; `.toReal` used at inequality boundaries |
 | `St` type parameter for adversary state | Enables stateful adversaries without fixing a concrete state type |
 | `NNReal` for advantage bound `ε` | Matches textbook (ε ≥ 0); simplifies inequality reasoning |
-
 
 ## Authors
 
