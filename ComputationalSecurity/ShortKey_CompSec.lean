@@ -83,58 +83,37 @@ theorem security_transfer
     apply closure (PMF.map G (U n)) (U m) (A m1) t t_enc (ε / 2)
     exact h_prg.right
 
-  rw [DistIndistinguishable]
-  intro D tD h_tD
+  -- 2. Define the Hybrid Sequence (length l = 2)
+  -- X 0 = P0, X 1 = Q0 (= Q1), X 2 = P1
+  let X : ℕ → PMF C := fun i =>
+    match i with
+    | 0 => P0
+    | 1 => Q0
+    | _ => P1
 
-  -- Triangle inequality: |P0 - P1| ≤ |P0 - Q0| + |Q1 - P1|, using Q0 = Q1.
-  have h_tri : |PrDX_one P0 D - PrDX_one P1 D|
-             ≤ |PrDX_one P0 D - PrDX_one Q0 D| + |PrDX_one Q1 D - PrDX_one P1 D| := by
-    rw [h_Q0_Q1]
-    exact abs_sub_le (PrDX_one P0 D) (PrDX_one Q1 D) (PrDX_one P1 D)
+  -- 3. Apply the transitivity lemma
+  apply transitivity X 2 t ε (by norm_num)
 
-  calc
-    |PrDX_one P0 D - PrDX_one P1 D|
-      ≤ |PrDX_one P0 D - PrDX_one Q0 D| + |PrDX_one Q1 D - PrDX_one P1 D| := h_tri
-    _ ≤ (ε / 2 : ℝ) + (ε / 2 : ℝ) := by
-        apply add_le_add
-        · exact h_P0_Q0 D tD h_tD
-        · rw [abs_sub_comm]
-          exact h_P1_Q1 D tD h_tD
-    _ = (ε : ℝ) := by simp
-
--- Key length parameter for the one-time pad.
-variable {n : ℕ} [Fintype (BitVec n)]
-
-/-- One-time pad encryption: XOR of key and plaintext. -/
-def OTP_Enc (n : ℕ) (k : BitVec n) (m : BitVec n) : BitVec n :=
-  k ^^^ m
-
-/-- One-time pad decryption: XOR of key and ciphertext. -/
-def OTP_Dec (n : ℕ) (k : BitVec n) (c : BitVec n) : BitVec n :=
-  k ^^^ c
-
-/-- Uniform distribution over `BitVec n`, used as the OTP key distribution. -/
-noncomputable
-def OTP_Gen : PMF (BitVec n) :=
-  PMF.uniformOfFintype (BitVec n)
-
-omit [Fintype (BitVec n)] in
-/-- A symmetry property of XOR: `c = k ^^^ m ↔ k = c ^^^ m`.
-    Used to show that for any ciphertext `c` there is a unique key mapping `m` to `c`. -/
-lemma mkc_symm (m k c : (BitVec n)) : c = k ^^^ m ↔ k = c ^^^ m := by
-  constructor
-  · intro hc
-    rw [hc, BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
-  · intro hk
-    rw [hk, BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
-
-/-- The one-time pad achieves indistinguishability-based perfect secrecy. -/
-theorem OTP_is_ind_perfectly_secret :
-    ind_perfect_secrecy (OTP_Enc n : BitVec n → BitVec n → BitVec n)
-                        (OTP_Gen : PMF (BitVec n)) := by
-  intro m₁ m₂ c
-  unfold Enc_dist OTP_Gen OTP_Enc
-  simp [Bind.bind, PMF.bind_apply, mkc_symm]
+  -- 4. Prove that adjacent steps are ε/2-indistinguishable
+  intro i hi
+  interval_cases i
+  · -- Step 0: P0 ≈ Q0 (ε/2)
+    change DistIndistinguishable P0 Q0 t (ε / 2)
+    simp_rw [P0, Q0]
+    rw [h_Enc_bind (PMF.map G (U n)) m0, h_Enc_bind (U m) m0]
+    apply closure (PMF.map G (U n)) (U m) (A m0) t t_enc (ε / 2)
+    exact h_prg.right
+  · -- Step 1: Q0 ≈ P1 (ε/2)
+    change DistIndistinguishable Q0 P1 t (ε / 2)
+    rw [h_Q0_Q1] -- Q0 = Q1
+    simp_rw [P1, Q1]
+    -- Since Q0 = Q1, this is equivalent to Q1 ≈ P1
+    rw [h_Enc_bind (U m) m1, h_Enc_bind (PMF.map G (U n)) m1]
+    -- Use the symmetry of indistinguishability if needed, or re-apply closure
+    -- DistIndistinguishable is symmetric, or apply closure directly:
+    rw [DistIndistinguishable_comm] -- Assume this lemma exists in your library
+    apply closure (PMF.map G (U n)) (U m) (A m1) t t_enc (ε / 2)
+    exact h_prg.right
 
 /-- Fixed-message indistinguishability: for any fixed pair of messages `m0` and `m1`,
     no adversary with complexity at most `t` can distinguish their ciphertext distributions
@@ -144,19 +123,6 @@ def FixedMessageIndistinguishable
     (Enc : K → M → C) (Gen : PMF K) (t : ℕ) (ε : NNReal) : Prop :=
   ∀ (m0 m1 : M), DistIndistinguishable (Enc_dist Enc Gen m0) (Enc_dist Enc Gen m1) t ε
 
-/-- The OTP scheme with keys drawn from a PRG satisfies `FixedMessageIndistinguishable`.
-    This follows directly from `OTP_is_ind_perfectly_secret` and `security_transfer`. -/
-theorem OTP_PRG_fixed_security
-    (n m : ℕ) [Fintype (BitVec n)] [Fintype (BitVec m)]
-    (G : BitVec n → BitVec m)
-    (t t_enc : ℕ) (ε : NNReal)
-    (h_prg : IsPRG G (t + t_enc) (ε / 2)) :
-    FixedMessageIndistinguishable (OTP_Enc m) (PMF.map G (U n)) t ε := by
-  rw [FixedMessageIndistinguishable]
-  intro m0 m1
-  apply security_transfer n m (OTP_Enc m) G t t_enc ε
-  · exact OTP_is_ind_perfectly_secret
-  · exact h_prg
 
 /-- Equivalence between fixed-message and adversarial indistinguishability.
     `FixedMessageIndistinguishable` holds if and only if `Indistinguishable` holds
@@ -288,5 +254,72 @@ theorem indistinguishability_equivalence
 
     rw [← h_adv_eq]
     apply h_adv_all A1' A2' 0 tD (by linarith)
+
+/--
+The fundamental security transfer theorem from perfect secrecy to computational indistinguishability.
+It proves that an encryption scheme achieving perfect secrecy under a truly uniform key distribution
+remains computationally indistinguishable (Definition 3.5) when the key is instead sampled
+from a Pseudorandom Generator (PRG). This reduction connects the PRG's security and the
+scheme's perfect secrecy to the adversarial indistinguishability definition.
+-/
+theorem IndPS_PRG_implies_Computational_Indistinguishability
+      (n m : ℕ) [Fintype (BitVec n)] [Fintype (BitVec m)]
+      [Fintype M] [Fintype C] [DecidableEq C]
+      (Enc : (BitVec m) → M → C)
+      (G : BitVec n → BitVec m)
+      (t t_enc : ℕ) (ε : NNReal)
+      (h_ind_ps : ind_perfect_secrecy Enc (U m))
+      (h_prg : IsPRG G (t + t_enc) (ε / 2)) :
+    ∀ (St : Type) [Fintype St] [Inhabited St],
+        Indistinguishable Enc (PMF.map G (U n)) t ε (St := St) := by
+
+  rw [← indistinguishability_equivalence]
+  exact security_transfer n m Enc G t t_enc ε h_ind_ps h_prg
+
+
+/- BitVec n is used to represent the sets of plain text, cipher text, and keys.-/
+variable {n : ℕ} [Fintype (BitVec n)]
+
+/-- One-time pad encryption function -/
+def OTP_Enc (n : ℕ) (k : BitVec n) (m : BitVec n) : BitVec n :=
+  k ^^^ m
+
+/-- One-time pad decryption function -/
+def OTP_Dec (n : ℕ) (k : BitVec n) (c : BitVec n) : BitVec n :=
+  k ^^^ c
+
+/-- Uniform distribution over the set of keys -/
+noncomputable
+def OTP_Gen : PMF (BitVec n) :=
+  PMF.uniformOfFintype (BitVec n)
+
+omit [Fintype (BitVec n)] in
+/-- Lemma: For any m, k, c ∈ BitVec n, c = Enc(k, m) ↔ k = Dec(c, m) -/
+lemma mkc_symm (m k c : (BitVec n)) : c=k^^^m ↔ k=c^^^m := by
+  constructor
+  · intro hc
+    rw [hc, BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
+  · intro hk
+    rw [hk, BitVec.xor_assoc,BitVec.xor_self, BitVec.xor_zero]
+
+/-- Theorem: One-time pad encryption achieves indistinguishability-based perfect secrecy -/
+theorem OTP_is_ind_perfectly_secret :
+  ind_perfect_secrecy (OTP_Enc n: BitVec n → BitVec n → BitVec n)
+                      (OTP_Gen : PMF (BitVec n)) := by
+    intro m₁ m₂ c
+
+    unfold Enc_dist OTP_Gen OTP_Enc
+    simp [Bind.bind, PMF.bind_apply, mkc_symm, tsum_ite_eq]
+
+theorem OTP_PRG_implies_Computational_Indistinguishability
+    (m m' : ℕ) [Fintype (BitVec m)] [Fintype (BitVec m')]
+    (t t_enc : ℕ) (ε : NNReal)
+    (G : BitVec m → BitVec m')
+    (h_prg : IsPRG G (t + t_enc) (ε / 2)) :
+    ∀ (St : Type) [Fintype St] [Inhabited St],
+        Indistinguishable (OTP_Enc m') (PMF.map G (U m)) t ε (St := St) := by
+  apply IndPS_PRG_implies_Computational_Indistinguishability
+  · exact OTP_is_ind_perfectly_secret
+  · exact h_prg
 
 end ComputationalSecurity

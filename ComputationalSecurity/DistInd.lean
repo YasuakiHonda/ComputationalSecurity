@@ -34,6 +34,18 @@ def DistIndistinguishable
     tD ≤ t →
     |PrDX_one X D - PrDX_one Y D| ≤ (ε : ℝ)
 
+lemma DistIndistinguishable_comm (X Y : PMF α) (t : ℕ) (ε : NNReal) :
+    DistIndistinguishable X Y t ε ↔ DistIndistinguishable Y X t ε := by
+  constructor
+  · intro h D tD h_tD
+    have h_bound := h D tD h_tD
+    rw [abs_sub_comm (PrDX_one X D) (PrDX_one Y D)] at h_bound
+    exact h_bound
+  · intro h D tD h_tD
+    have h_bound := h D tD h_tD
+    rw [abs_sub_comm (PrDX_one Y D) (PrDX_one X D)] at h_bound
+    exact h_bound
+
 /-- Proposition 4.1 [Closure]: Computational indistinguishability is preserved
     under efficient computation.
     If X ≈(t+tA, ε) Y and A is an algorithm with complexity tA,
