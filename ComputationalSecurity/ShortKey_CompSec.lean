@@ -11,6 +11,7 @@
 -/
 import ComputationalSecurity.DistInd
 import ComputationalSecurity.Defs
+import ComputationalSecurity.PRGDefs
 import Mathlib.Algebra.Group.Pointwise.Finset.BigOperators
 import Mathlib.Topology.Algebra.InfiniteSum.Basic
 
