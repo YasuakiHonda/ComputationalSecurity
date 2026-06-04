@@ -277,9 +277,6 @@ theorem IndPS_PRG_implies_Computational_Indistinguishability
   exact security_transfer n m Enc G t t_enc ε h_ind_ps h_prg
 
 
-/- BitVec n is used to represent the sets of plain text, cipher text, and keys.-/
-variable {n : ℕ} [Fintype (BitVec n)]
-
 /-- One-time pad encryption function -/
 def OTP_Enc (n : ℕ) (k : BitVec n) (m : BitVec n) : BitVec n :=
   k ^^^ m
@@ -293,7 +290,7 @@ noncomputable
 def OTP_Gen : PMF (BitVec n) :=
   PMF.uniformOfFintype (BitVec n)
 
-omit [Fintype (BitVec n)] in
+
 /-- Lemma: For any m, k, c ∈ BitVec n, c = Enc(k, m) ↔ k = Dec(c, m) -/
 lemma mkc_symm (m k c : (BitVec n)) : c=k^^^m ↔ k=c^^^m := by
   constructor

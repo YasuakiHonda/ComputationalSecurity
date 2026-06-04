@@ -234,21 +234,6 @@ theorem transitivity
       rw [← h_total]
       exact h_sum_bound
 
-
-instance (n : ℕ) : Fintype (BitVec n) :=
-  Fintype.ofEquiv (Fin (2^n)) {
-    toFun := BitVec.ofFin
-    invFun := BitVec.toFin
-    left_inv := fun _ => rfl
-    right_inv := fun x => by cases x; rfl
-  }
-
-
-/-- The uniform distribution over {0, 1}^n.
-    Uses BitVec n as the representation of n-bit strings. -/
-noncomputable def U (n : ℕ) : PMF (BitVec n) :=
-  PMF.uniformOfFintype (BitVec n)
-
 /-- Definition 4.3: Pseudorandom Distribution.
     A distribution X over {0, 1}^n is (t, ε)-pseudorandom if
     it is (t, ε)-indistinguishable from the uniform distribution Un. -/
@@ -262,7 +247,5 @@ def IsPseudorandom {n : ℕ} (X : PMF (BitVec n)) (t : ℕ) (ε : NNReal) : Prop
 def IsPRG {n m : ℕ} (G : BitVec n → BitVec m) (t : ℕ) (ε : NNReal)
       [Fintype (BitVec n)] [Fintype (BitVec m)] : Prop :=
   (n < m) ∧ IsPseudorandom (PMF.map G (U n)) t ε
-
-
 
 end ComputationalSecurity

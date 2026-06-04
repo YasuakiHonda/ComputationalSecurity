@@ -11,6 +11,8 @@
     - PMF.tsum_mul_le_one, PMF.tsum_mul_ne_top: boundedness lemmas for
       expected values of functions bounded by 1.
     - formula1: an ENNReal algebraic identity used in the Guessing Lemma proof.
+    - Fintype (BitVec n): instance for finite type over n-bit vectors.
+    - U: the uniform distribution over {0,1}^n.
 
   Authors: Yasuaki Honda
 -/
@@ -18,6 +20,7 @@
 import Mathlib.Probability.ProbabilityMassFunction.Monad
 import Mathlib.Probability.ProbabilityMassFunction.Constructions
 import Mathlib.Probability.Distributions.Uniform
+import Mathlib.Data.BitVec
 
 /-- Bit is defined as Fin 2, consistent with textbook notation. -/
 abbrev Bit := Fin 2
@@ -112,3 +115,26 @@ lemma formula1 (A B : ENNReal)
   · norm_num
   · exact ENNReal.mul_ne_top (by norm_num) (ENNReal.sub_ne_top (by norm_num))
   · exact ENNReal.mul_ne_top (by norm_num) hBnotT
+
+-- ============================================================
+-- BitVec Fintype instance and uniform distribution
+-- ============================================================
+
+/-- `BitVec n` is a finite type with `2^n` elements. -/
+instance (n : ℕ) : Fintype (BitVec n) :=
+  Fintype.ofEquiv (Fin (2^n)) {
+    toFun := BitVec.ofFin
+    invFun := BitVec.toFin
+    left_inv := fun _ => rfl
+    right_inv := fun x => by cases x; rfl
+  }
+
+namespace ComputationalSecurity
+
+open PMF
+
+/-- The uniform distribution over `{0,1}^n`. -/
+noncomputable def U (n : ℕ) : PMF (BitVec n) :=
+  PMF.uniformOfFintype (BitVec n)
+
+end ComputationalSecurity

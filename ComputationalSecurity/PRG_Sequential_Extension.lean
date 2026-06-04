@@ -6,14 +6,6 @@ import Mathlib.Data.Nat.Bitwise
 
 namespace ComputationalSecurity
 
-instance (n : ℕ) : Fintype (BitVec n) :=
-  Fintype.ofEquiv (Fin (2^n)) {
-    toFun := BitVec.ofFin
-    invFun := BitVec.toFin
-    left_inv := fun _ => rfl
-    right_inv := fun x => by cases x; rfl
-  }
-
 open PMF
 
 /-!
