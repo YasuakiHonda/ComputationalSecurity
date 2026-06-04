@@ -46,6 +46,12 @@ lemma DistIndistinguishable_comm (X Y : PMF α) (t : ℕ) (ε : NNReal) :
     rw [abs_sub_comm (PrDX_one Y D) (PrDX_one X D)] at h_bound
     exact h_bound
 
+lemma DistIndistinguishable_mono (X Y : PMF α) (t t' : ℕ) (ε : NNReal)
+    (h : DistIndistinguishable X Y t ε) (ht : t' ≤ t) :
+    DistIndistinguishable X Y t' ε := by
+  intro D tD htD
+  exact h D tD (htD.trans ht)
+
 /-- Proposition 4.1 [Closure]: Computational indistinguishability is preserved
     under efficient computation.
     If X ≈(t+tA, ε) Y and A is an algorithm with complexity tA,
@@ -229,24 +235,32 @@ theorem transitivity
       exact h_sum_bound
 
 
+instance (n : ℕ) : Fintype (BitVec n) :=
+  Fintype.ofEquiv (Fin (2^n)) {
+    toFun := BitVec.ofFin
+    invFun := BitVec.toFin
+    left_inv := fun _ => rfl
+    right_inv := fun x => by cases x; rfl
+  }
+
 
 /-- The uniform distribution over {0, 1}^n.
     Uses BitVec n as the representation of n-bit strings. -/
-noncomputable def U (n : ℕ) [Fintype (BitVec n)] : PMF (BitVec n) :=
+noncomputable def U (n : ℕ) : PMF (BitVec n) :=
   PMF.uniformOfFintype (BitVec n)
 
 /-- Definition 4.3: Pseudorandom Distribution.
     A distribution X over {0, 1}^n is (t, ε)-pseudorandom if
     it is (t, ε)-indistinguishable from the uniform distribution Un. -/
-def IsPseudorandom {n : ℕ} [Fintype (BitVec n)] (X : PMF (BitVec n)) (t : ℕ) (ε : NNReal) : Prop :=
+def IsPseudorandom {n : ℕ} (X : PMF (BitVec n)) (t : ℕ) (ε : NNReal) : Prop :=
   DistIndistinguishable X (U n) t ε
 
 /-- Definition 4.4: (t, ε)-Pseudorandom Generator (PRG).
     A function G: {0, 1}^n → {0, 1}^m is a (t, ε)-PRG if
     1. The output length m is greater than the input length n (expansion).
     2. The distribution G(s) where s ← Un is (t, ε)-pseudorandom. -/
-def IsPRG {n m : ℕ} [Fintype (BitVec n)] [Fintype (BitVec m)]
-          (G : BitVec n → BitVec m) (t : ℕ) (ε : NNReal) : Prop :=
+def IsPRG {n m : ℕ} (G : BitVec n → BitVec m) (t : ℕ) (ε : NNReal)
+      [Fintype (BitVec n)] [Fintype (BitVec m)] : Prop :=
   (n < m) ∧ IsPseudorandom (PMF.map G (U n)) t ε
 
 
