@@ -1,17 +1,19 @@
-/-
-  Definitions and propositions for computational indistinguishability
-  of probability distributions.
-  Formalizes Definition 4.1 and Proposition 4.1 (Closure) from the textbook.
-
-  Reference: Chapter 4, "Pseudorandomness"
-  Authors: Yasuaki Honda
--/
-
 import ComputationalSecurity.ProbabilityUtils
 import Mathlib.Probability.ProbabilityMassFunction.Monad
 import Mathlib.Probability.ProbabilityMassFunction.Constructions
 import Mathlib.Probability.Distributions.Uniform
 import Mathlib.Data.BitVec
+/-!
+  Definitions and propositions for computational indistinguishability
+  of probability distributions.
+  Formalizes Definition 4.1 and Proposition 4.1 (Closure) from the textbook,
+  along with supporting lemmas for the hybrid argument and bind preservation.
+
+  Reference: Chapter 4, "Pseudorandomness"
+  Authors: Yasuaki Honda
+-/
+
+
 namespace ComputationalSecurity
 
 open PMF
@@ -34,6 +36,7 @@ def DistIndistinguishable
     tD ≤ t →
     |PrDX_one X D - PrDX_one Y D| ≤ (ε : ℝ)
 
+/-- `DistIndistinguishable` is symmetric. -/
 lemma DistIndistinguishable_comm (X Y : PMF α) (t : ℕ) (ε : NNReal) :
     DistIndistinguishable X Y t ε ↔ DistIndistinguishable Y X t ε := by
   constructor
@@ -46,6 +49,7 @@ lemma DistIndistinguishable_comm (X Y : PMF α) (t : ℕ) (ε : NNReal) :
     rw [abs_sub_comm (PrDX_one Y D) (PrDX_one X D)] at h_bound
     exact h_bound
 
+/-- `DistIndistinguishable` is monotone in t: a bound for larger t implies one for smaller t. -/
 lemma DistIndistinguishable_mono (X Y : PMF α) (t t' : ℕ) (ε : NNReal)
     (h : DistIndistinguishable X Y t ε) (ht : t' ≤ t) :
     DistIndistinguishable X Y t' ε := by
@@ -62,47 +66,19 @@ theorem closure
     (t tA : ℕ) (ε : NNReal)
     (hind : DistIndistinguishable X Y (t + tA) ε) :
         DistIndistinguishable (X >>= A) (Y >>= A) t ε := by
-  -- 1. Unfold the definition of DistIndistinguishable for the goal.
-  -- We consider an arbitrary distinguisher D for the distributions (X >>= A) and (Y >>= A).
   rw [DistIndistinguishable]
   intro D tD h_tD
-
-  -- 2. Construct a reduction distinguisher D' : α → PMF Bit.
-  -- D' is the composition of the algorithm A and the distinguisher D.
-  -- Logic: If D can distinguish A(X) from A(Y), then D' can distinguish X from Y.
+  -- Reduce to indistinguishability of X and Y under the composed distinguisher D'.
   let D' : α → PMF Bit := fun x => (A x >>= D)
-
-  -- 3. Show that the complexity of D' is within the bound (t + tA).
-  -- Since tD ≤ t and A has complexity tA, the combined complexity tD' is tA + tD.
   let tD' := tA + tD
-  have h_complexity : tD' ≤ t + tA := by
-    -- Goal: tA + tD ≤ t + tA
-    -- This follows from h_tD : tD ≤ t.
-    omega
-
-  -- 4. Apply the original indistinguishability (hind) to the constructed D'.
-  -- This provides the absolute difference bound ε for X and Y under D'.
+  have h_complexity : tD' ≤ t + tA := by omega
   have h_bound := hind D' tD' h_complexity
-
-  -- 5. Use the Monad associativity (PMF.bind_bind) to bridge the gap.
-  -- We need to prove that:
-  -- Pr[z ← (X >>= A); d ← D z; pure (d == 1)] = Pr[x ← X; d ← D' x; pure (d == 1)]
-
-  -- Intermediate goal for X and Y
   have h_ANY_equiv (ANY : PMF α) : (do let d ← ((ANY >>= A) >>= D); PMF.pure (d == 1))
                  = (do let d ← (ANY >>= D'); PMF.pure (d == 1)) := by
-    -- Goal: (X >>= A) >>= (fun z => D z >>= (fun d => pure (d == 1)))
-    --       = X >>= (fun x => (A x >>= D) >>= (fun d => pure (d == 1)))
-    -- Use PMF.bind_bind multiple times.
-    simp only [D']
-    simp only [Fin.isValue, bind_assoc]
-
-  -- 6. Final calculation.
-  -- Rewrite the goal using the equivalences and apply the hypothesis bound.
+    simp only [D', Fin.isValue, bind_assoc]
   unfold PrDX_one at h_bound ⊢
   rw [h_ANY_equiv X, h_ANY_equiv Y]
   exact h_bound
-
 
 /-- Lemma 4.1 (Hybrid Lemma - Sum version):
     The total distance is bounded by the sum of adjacent distances.
@@ -112,7 +88,7 @@ lemma hybrid_sum_inequality (f : ℕ → ℝ) (l : ℕ) :
   rw [abs_sub_comm (f 0) (f l)]
   rw [← Finset.sum_range_sub (fun i => f i) l]
   have h_tri := Finset.abs_sum_le_sum_abs (fun i => f (i + 1) - f i) (Finset.range l)
-  have : ∑ i ∈  Finset.range l, |f (i + 1) - f i| = ∑ i ∈  Finset.range l, |f i - f (i + 1)| := by
+  have : ∑ i ∈ Finset.range l, |f (i + 1) - f i| = ∑ i ∈ Finset.range l, |f i - f (i + 1)| := by
     apply Finset.sum_congr rfl
     intro i hi
     rw [abs_sub_comm (f (i + 1)) (f i)]
@@ -121,8 +97,7 @@ lemma hybrid_sum_inequality (f : ℕ → ℝ) (l : ℕ) :
 
 /-- Lemma 4.2 (Hybrid Lemma - Contrapositive):
     If the total distance is greater than ε, then there exists at least one adjacent pair
-    that has a distance greater than ε/l.
--/
+    that has a distance greater than ε/l. -/
 lemma hybrid_lemma
       (X : ℕ → PMF α) (l : ℕ) (t : ℕ) (ε : NNReal)
       (hl : l > 0)
@@ -131,13 +106,16 @@ lemma hybrid_lemma
     ∃ i < l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| > (ε / l : ℝ) := by
   by_contra h_contra
   push_neg at h_contra
-  have h_total_bound : |PrDX_one (X 0) D - PrDX_one (X l) D| ≤ ∑ i ∈ Finset.range l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| := by
-    apply hybrid_sum_inequality (fun i => PrDX_one (X i) D) l
-  have h_each_bound : ∀ i ∈ Finset.range l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| ≤ (ε / l : ℝ) := by
+  have h_total_bound : |PrDX_one (X 0) D - PrDX_one (X l) D| ≤
+      ∑ i ∈ Finset.range l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| :=
+    hybrid_sum_inequality (fun i => PrDX_one (X i) D) l
+  have h_each_bound : ∀ i ∈ Finset.range l,
+      |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| ≤ (ε / l : ℝ) := by
     intro i hi
     exact h_contra i (Finset.mem_range.mp hi)
-  have h_sum_bound : ∑ i ∈ Finset.range l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| ≤ ∑ i ∈ Finset.range l, (ε / l : ℝ) := by
-    apply Finset.sum_le_sum h_each_bound
+  have h_sum_bound : ∑ i ∈ Finset.range l, |PrDX_one (X i) D - PrDX_one (X (i + 1)) D| ≤
+      ∑ i ∈ Finset.range l, (ε / l : ℝ) :=
+    Finset.sum_le_sum h_each_bound
   have h_total : ∑ i ∈ Finset.range l, (ε / l : ℝ) = ε := by
     calc
       ∑ i ∈ Finset.range l, (ε / l : ℝ)
@@ -167,7 +145,8 @@ theorem transitivity
   have h_each_bound : ∀ i ∈ Finset.range l, |f i - f (i + 1)| ≤ (ε / l : ℝ) := by
     intro i hi
     exact h_adjacent i (Finset.mem_range.mp hi) D tD h_tD
-  have h_sum_bound : ∑ i ∈ Finset.range l, |f i - f (i + 1)| ≤ ∑ i ∈ Finset.range l, (ε / l : ℝ) :=
+  have h_sum_bound : ∑ i ∈ Finset.range l, |f i - f (i + 1)| ≤
+      ∑ i ∈ Finset.range l, (ε / l : ℝ) :=
     Finset.sum_le_sum h_each_bound
   have h_total : ∑ i ∈ Finset.range l, (ε / l : ℝ) = ε := by
     calc
@@ -181,5 +160,43 @@ theorem transitivity
   calc
     |f 0 - f l| ≤ ∑ i ∈ Finset.range l, |f i - f (i + 1)| := h_tri
     _ ≤ (ε : ℝ) := by rw [← h_total]; exact h_sum_bound
+
+/-- `DistIndistinguishable` is preserved under monadic bind
+    when indistinguishability holds pointwise. -/
+lemma DistIndistinguishable_bind {α β : Type} [Fintype α] [Fintype β]
+    (X : PMF α) (Y1 Y2 : α → PMF β) (t : ℕ) (ε : NNReal) :
+    (∀ a, DistIndistinguishable (Y1 a) (Y2 a) t ε) →
+    DistIndistinguishable (X >>= Y1) (X >>= Y2) t ε := by
+  intro h_indist D tD h_tD
+  unfold DistIndistinguishable at h_indist
+  -- Rewrite Pr[D(X >>= Y)] as a weighted sum over X.
+  have h_linear (Y : α → PMF β) :
+      PrDX_one (X >>= Y) D = ∑ a, (X a).toReal * (PrDX_one (Y a) D) := by
+    unfold PrDX_one Pr
+    simp only [bind_assoc]
+    erw [PMF.bind_apply]
+    simp only [tsum_fintype]
+    rw [ENNReal.toReal_sum]
+    · simp_rw [ENNReal.toReal_mul]
+    · intro a _
+      apply ENNReal.mul_ne_top (PMF.apply_ne_top _ _) (PMF.apply_ne_top _ _)
+  rw [h_linear Y1, h_linear Y2, ← Finset.sum_sub_distrib]
+  simp_rw [← mul_sub]
+  calc
+    |∑ a, (X a).toReal * (PrDX_one (Y1 a) D - PrDX_one (Y2 a) D)|
+      ≤ ∑ a, |(X a).toReal * (PrDX_one (Y1 a) D - PrDX_one (Y2 a) D)| := by
+        apply Finset.abs_sum_le_sum_abs _ _
+      _ = ∑ a, (X a).toReal * |PrDX_one (Y1 a) D - PrDX_one (Y2 a) D| := by
+          congr; funext a
+          rw [abs_mul, abs_of_nonneg ENNReal.toReal_nonneg]
+      _ ≤ ∑ a, (X a).toReal * (ε : ℝ) := by
+          apply Finset.sum_le_sum; intro a _
+          apply mul_le_mul_of_nonneg_left (h_indist a D tD h_tD) ENNReal.toReal_nonneg
+      _ = (ε : ℝ) := by
+          rw [← Finset.sum_mul]
+          have h_tsum : ∑ a, X a = ∑' a, X a := (tsum_fintype _).symm
+          rw [← ENNReal.toReal_sum]
+          · rw [h_tsum, tsum_coe]; simp
+          · intro a _; apply PMF.apply_ne_top
 
 end ComputationalSecurity

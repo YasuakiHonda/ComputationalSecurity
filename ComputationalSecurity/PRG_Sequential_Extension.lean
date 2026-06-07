@@ -1,6 +1,5 @@
-import ComputationalSecurity.Defs
 import ComputationalSecurity.DistInd
-import Mathlib.Data.BitVec
+import ComputationalSecurity.PRGDefs
 import Mathlib.Data.Nat.Size
 import Mathlib.Data.Nat.Bitwise
 
@@ -15,16 +14,6 @@ Formalizes the construction of an L-bit PRG from a 1-bit PRG
 via the sequential construction (Figure 4.2 in the textbook).
 Security is proven via a hybrid argument over L steps.
 -/
-
-/-- Equivalence between `BitVec (n+m)` and `BitVec n × BitVec m` via split/concat. -/
-private def bitvec_equiv (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m :=
-  { toFun    := fun v => (v.extractLsb' m n, v.extractLsb' 0 m)
-    invFun   := fun p => p.1 ++ p.2
-    left_inv := fun v => by apply BitVec.eq_of_toNat_eq; simp
-    right_inv := fun p => by
-      ext1
-      · simp [BitVec.extractLsb'_append_eq_left]
-      · simp [BitVec.extractLsb'_append_eq_right] }
 
 section Construction
 
@@ -57,121 +46,7 @@ end Construction
 
 section Lemmas
 
-/-- `DistIndistinguishable` is preserved under monadic bind
-    when indistinguishability holds pointwise. -/
-lemma DistIndistinguishable_bind {α β : Type} [Fintype α] [Fintype β]
-    (X : PMF α) (Y1 Y2 : α → PMF β) (t : ℕ) (ε : NNReal) :
-    (∀ a, DistIndistinguishable (Y1 a) (Y2 a) t ε) →
-    DistIndistinguishable (X >>= Y1) (X >>= Y2) t ε := by
-  intro h_indist D tD h_tD
-  unfold DistIndistinguishable at h_indist
-  -- Rewrite Pr[D(X >>= Y)] as a weighted sum over X.
-  have h_linear (Y : α → PMF β) :
-      PrDX_one (X >>= Y) D = ∑ a, (X a).toReal * (PrDX_one (Y a) D) := by
-    unfold PrDX_one Pr
-    simp only [bind_assoc]
-    erw [PMF.bind_apply]
-    simp only [tsum_fintype]
-    rw [ENNReal.toReal_sum]
-    · simp_rw [ENNReal.toReal_mul]
-    · intro a _
-      apply ENNReal.mul_ne_top (PMF.apply_ne_top _ _) (PMF.apply_ne_top _ _)
-  rw [h_linear Y1, h_linear Y2, ← Finset.sum_sub_distrib]
-  simp_rw [← mul_sub]
-  -- Triangle inequality + pointwise bound + PMF sum = 1.
-  calc
-    |∑ a, (X a).toReal * (PrDX_one (Y1 a) D - PrDX_one (Y2 a) D)|
-      ≤ ∑ a, |(X a).toReal * (PrDX_one (Y1 a) D - PrDX_one (Y2 a) D)| := by
-        apply Finset.abs_sum_le_sum_abs _ _
-      _ = ∑ a, (X a).toReal * |PrDX_one (Y1 a) D - PrDX_one (Y2 a) D| := by
-          congr; funext a
-          rw [abs_mul, abs_of_nonneg ENNReal.toReal_nonneg]
-      _ ≤ ∑ a, (X a).toReal * (ε : ℝ) := by
-          apply Finset.sum_le_sum; intro a _
-          apply mul_le_mul_of_nonneg_left (h_indist a D tD h_tD) ENNReal.toReal_nonneg
-      _ = (ε : ℝ) := by
-          rw [← Finset.sum_mul]
-          have h_tsum : ∑ a, X a = ∑' a, X a := (tsum_fintype _).symm
-          rw [← ENNReal.toReal_sum]
-          · rw [h_tsum, tsum_coe]; simp
-          · intro a _; apply PMF.apply_ne_top
-
-
-private lemma card_bitvec (n : ℕ) : Fintype.card (BitVec n) = 2^n := by
-  have : Fintype.card (BitVec n) = Fintype.card (Fin (2^n)) :=
-    Fintype.card_congr ⟨BitVec.toFin, BitVec.ofFin,
-      fun x => by cases x; rfl, fun _ => rfl⟩
-  simp [this]
-
-/-- The sum over `b2 : BitVec m` of `if b1 ++ b2 = c then 1 else 0`
-    equals 1 iff `b1` matches the high bits of `c`, else 0. -/
-private lemma tsum_append_eq (n m : ℕ) (c : BitVec (n + m)) (b1 : BitVec n) :
-    ∑' b2 : BitVec m, (if b1 ++ b2 = c then 1 else 0 : ENNReal)
-    = if b1 = c.extractLsb' m n then 1 else 0 := by
-  rw [tsum_fintype]
-  by_cases h : b1 = c.extractLsb' m n
-  · subst h
-    rw [if_pos rfl, Finset.sum_eq_single (c.extractLsb' 0 m)]
-    · simp [BitVec.extractLsb'_append_extractLsb']
-    · intro b2 _ hne
-      rw [if_neg]; intro heq; apply hne
-      have := congr_arg (BitVec.extractLsb' 0 m) heq
-      simp [BitVec.extractLsb'_append_eq_right] at this; exact this
-    · intro h; exact absurd (Finset.mem_univ _) h
-  · rw [if_neg h]
-    apply Finset.sum_eq_zero; intro b2 _
-    rw [if_neg]; intro heq; apply h
-    have := congr_arg (BitVec.extractLsb' m n) heq
-    simp [BitVec.extractLsb'_append_eq_left] at this; exact this
-
-/-- Sampling `n+m` uniform bits equals sampling `n` bits then `m` bits and concatenating. -/
-lemma U_add_dist (n m : ℕ) :
-    U (n + m) = (do let b1 ← U n; let b2 ← U m; return b1 ++ b2) := by
-  change U (n + m) = (U n).bind (fun b1 => (U m).map (fun b2 => b1 ++ b2))
-  apply PMF.ext; intro c
-  simp only [U, PMF.uniformOfFintype_apply, PMF.bind_apply, PMF.map_apply, card_bitvec]
-  simp_rw [ENNReal.tsum_mul_left]
-  simp only [Nat.cast_pow, Nat.cast_ofNat, tsum_fintype]
-  rw [Finset.sum_eq_single (c.extractLsb' m n)]
-  · rw [Finset.sum_eq_single (c.extractLsb' 0 m)]
-    · simp only [BitVec.extractLsb'_append_extractLsb', ↓reduceIte]
-      rw [pow_add]
-      apply ENNReal.mul_inv
-        (Or.inl (ENNReal.pow_ne_zero (by norm_num) n))
-        (Or.inr (ENNReal.pow_ne_zero (by norm_num) m))
-    · intro b2 _ hne; rw [if_neg]; intro heq; apply hne
-      have := congr_arg (BitVec.extractLsb' 0 m) heq
-      simp [BitVec.extractLsb'_append_eq_right] at this; exact this.symm
-    · intro h; exact absurd (Finset.mem_univ _) h
-  · intro b1 _ hne; simp; intro i; by_contra
-    rw [this] at hne; exact hne BitVec.extractLsb'_append_eq_left.symm
-  · intro h; exact absurd (Finset.mem_univ _) h
-
-/-- A sum over `BitVec (n+m)` equals the double sum over `BitVec n` and `BitVec m`. -/
-private lemma sum_bitvec_split (n m : ℕ) {f : BitVec (n + m) → ENNReal} :
-    ∑ v : BitVec (n + m), f v = ∑ v1 : BitVec n, ∑ v2 : BitVec m, f (v1 ++ v2) := by
-  have key : ∑ v : BitVec (n + m), f v =
-      ∑ p : BitVec n × BitVec m, f (p.1 ++ p.2) :=
-    Fintype.sum_equiv (bitvec_equiv n m) _ _ (fun v => by simp [bitvec_equiv])
-  rw [key, Fintype.sum_prod_type]
-
-/-- Equivalence swapping the summation order for `BitVec (1+n)` and `BitVec (n+1)`. -/
-private def bitvec_add_comm_equiv (n : ℕ) : BitVec (1 + n) ≃ BitVec (n + 1) :=
-  { toFun   := fun v => v.cast (by omega)
-    invFun  := fun v => v.cast (by omega)
-    left_inv  := fun v => by simp
-    right_inv := fun v => by simp }
-
-/-- A sum over `BitVec (n+1)` equals the double sum over `BitVec 1` and `BitVec n`. -/
-private lemma sum_bitvec_n_plus_one (n : ℕ) {f : BitVec (n + 1) → ENNReal} :
-    ∑ v : BitVec (n + 1), f v
-    = ∑ b1 : BitVec 1, ∑ b2 : BitVec n, f ((b1 ++ b2).cast (by omega)) := by
-  calc ∑ v : BitVec (n + 1), f v
-      = ∑ v : BitVec (1 + n), f (v.cast (by omega)) := by
-          apply Fintype.sum_equiv (bitvec_add_comm_equiv n).symm
-          intro v; simp [bitvec_add_comm_equiv]
-    _ = ∑ b1 : BitVec 1, ∑ b2 : BitVec n, f ((b1 ++ b2).cast (by omega)) :=
-          sum_bitvec_split 1 n
+variable {n : ℕ}
 
 /-- Splitting a concatenation recovers its parts: `split_next (b ++ s) = (b, s)`. -/
 private lemma split_next_append (b : BitVec 1) (s : BitVec n) :
@@ -214,51 +89,6 @@ lemma G_prime_step_eq_F_step (s : BitVec n) (k : ℕ) :
     G' G (k + 1) s = F_step G (k + 1) (G s) := by
   unfold G' G_ext F_step
   simp only [split_next]
-
-/-- Splitting `U (L-i)` into a `(L-i-1)`-bit prefix and a 1-bit suffix. -/
-lemma h_split_U (i L : Nat) (hL : i < L) : U (L - i) = do
-      let pre ← U (L - (i + 1))
-      let b   ← U 1
-      return (pre ++ b).cast (by omega) := by
-  let P := L - (i + 1)
-  have h_len : L - i = P + 1 := by omega
-  apply PMF.ext; intro x
-  simp only [U, PMF.uniformOfFintype_apply, card_bitvec, Nat.cast_pow, Nat.cast_ofNat]
-  simp only [Bind.bind, Pure.pure, PMF.bind_apply, PMF.pure_apply, tsum_fintype]
-  simp only [U, PMF.uniformOfFintype_apply, card_bitvec]
-  simp_rw [← Finset.mul_sum, ← mul_assoc]
-  rw [← ENNReal.mul_inv]
-  · norm_cast
-    -- Combine the two powers: 2^(L-i-1) * 2^1 = 2^(L-i).
-    have : 2 ^ (L - (i + 1)) * 2 ^ 1 = 2^(L-i) := by aesop
-    rw [this]
-    have (a b : ENNReal) (hnez : a ≠ 0) (hnet : a ≠ ⊤) : a = a * b ↔ b = 1 := by
-      constructor
-      · intro h; exact (ENNReal.mul_eq_left hnez hnet).mp (id (Eq.symm h))
-      · intro h; rw [h, mul_one]
-    rw [this]
-    · -- Show the double sum over (pre, b) equals 1 for any fixed x.
-      simp only [Nat.cast_ite, Nat.cast_one, Nat.cast_zero]
-      -- Cast x to BitVec (P+1) so that extractLsb' applies cleanly.
-      set x' := x.cast h_len with hx'
-      rw [show x = x'.cast h_len.symm from by norm_cast]
-      rw [Finset.sum_eq_single (x.extractLsb' 1 P)]
-      · rw [Finset.sum_eq_single (x.extractLsb' 0 1)]
-        · rw [if_pos]
-          exact congrArg (BitVec.cast (by omega)) BitVec.extractLsb'_append_extractLsb' |>.symm
-        · intro b _ hne; simp; intro heq; apply hne
-          have := congr_arg (BitVec.extractLsb' 0 1) heq
-          erw [BitVec.extractLsb'_append_eq_right] at this; exact this.symm
-        · intro h; exact absurd (Finset.mem_univ _) h
-      · intro b _ hne
-        apply Finset.sum_eq_zero; intro b2 _; simp; intro heq; apply hne
-        have := congr_arg (BitVec.extractLsb' 1 P) heq
-        erw [BitVec.extractLsb'_append_eq_left] at this; exact this.symm
-      · intro h; exact absurd (Finset.mem_univ _) h
-    · rw [ENNReal.inv_ne_zero]; exact ENNReal.natCast_ne_top (2 ^ (L - i))
-    · rw [ENNReal.inv_ne_top]; norm_cast; exact NeZero.ne (2 ^ (L - i))
-  · right; norm_num
-  · right; norm_num
 
 /-- `Hybrid i` equals the distribution obtained by sampling a uniform prefix
     and then applying `F_step` to a fresh uniform `(n+1)`-bit value. -/
