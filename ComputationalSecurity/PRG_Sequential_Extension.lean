@@ -203,7 +203,7 @@ theorem PRG_Sequential_Extension
     unfold Hybrid
     simp only [Nat.le_refl, ↓reduceDIte, LawfulMonad.bind_pure_comp]
     apply PMF.ext; intro x
-    -- ここで BitVec (L-L) の要素は一つだけという事実を使う
+    -- We use the fact that BitVec(L-L) is a singleton, meaning an empty bit string.
     have huniq : ∀ b : BitVec (L - L), b = BitVec.zero (L - L) := by
       intro b; apply BitVec.eq_of_toNat_eq; simp
       have h : b.toNat < 2 ^ (L - L) := b.isLt
