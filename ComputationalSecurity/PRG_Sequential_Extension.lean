@@ -111,7 +111,8 @@ lemma step_equiv_random (hi : i < L) :
   simp only [LawfulMonad.bind_pure_comp, LawfulMonad.pure_bind, DFunLike.coe_fn_eq]
   erw [← LawfulMonad.bind_pure_comp]
   simp_rw [← LawfulMonad.bind_pure_comp]
-  apply PMF.ext; intro y
+  apply PMF.ext;
+  intro y
   erw [PMF.bind_apply, tsum_fintype]
   erw [PMF.bind_apply, tsum_fintype]
   -- Decompose the sum over BitVec (n+1) into a double sum over BitVec 1 and BitVec n.
@@ -191,53 +192,34 @@ theorem PRG_Sequential_Extension
   -- Hybrid 0 equals U L (all random bits).
   have h_end : U L = Hybrid G L 0 := by
     unfold Hybrid; simp [zero_le, Nat.sub_zero]
-    apply PMF.ext; intro x
-    simp only [Bind.bind, PMF.bind_apply, tsum_fintype]
-    have h_inner (i : BitVec L) : ((fun _ : BitVec n => i) <$> U n) x = if i = x then 1 else 0 := by
-      erw [PMF.map_apply]
-      simp only [U, PMF.uniformOfFintype_apply, card_bitvec, Nat.cast_pow, Nat.cast_ofNat,
-        tsum_fintype]
-      erw [Finset.sum_const]
-      simp [Finset.card_univ, smul_ite, nsmul_eq_mul, card_bitvec, Nat.cast_pow,
-        Nat.cast_ofNat, ENNReal.mul_inv_cancel]
-      simp_rw [eq_comm]
-    simp only [h_inner]
-    simp only [U, PMF.uniformOfFintype_apply, card_bitvec, Nat.cast_pow, Nat.cast_ofNat]
-    rw [← Finset.mul_sum, Finset.sum_eq_single x]
-    · simp
-    · intro b h_b hne; simp [hne]
-    · simp
+    have (c : BitVec L) :  (fun a ↦ c) <$> U n = PMF.pure c := by
+      change PMF.map (Function.const _ c) (U n) = PMF.pure c
+      exact PMF.map_const (U n) c
+    simp only [Bind.bind, this]
+    simp only [PMF.bind_pure]
+
   -- Hybrid L equals the G' distribution (all PRG bits, zero random bits).
   have h_start : (U n).map (G' G L) = Hybrid G L L := by
     unfold Hybrid
-    simp only [U, Std.le_refl, ↓reduceDIte, LawfulMonad.bind_pure_comp]
-    simp only [Bind.bind]
+    simp only [Nat.le_refl, ↓reduceDIte, LawfulMonad.bind_pure_comp]
     apply PMF.ext; intro x
-    simp only [PMF.map_apply, PMF.bind_apply, U, PMF.uniformOfFintype_apply, card_bitvec]
-    -- BitVec (L - L) has exactly one element (BitVec.zero 0), so the sum collapses.
-    simp only [Nat.cast_pow, Nat.cast_ofNat, tsum_fintype, tsub_self, pow_zero, Nat.cast_one,
-      inv_one, one_mul]
-    rw [Finset.sum_eq_single (BitVec.zero (L - L))]
-    · simp only [BitVec.zero_eq]
-      erw [PMF.map_apply, tsum_fintype]
-      congr; funext a
-      simp only [uniformOfFintype_apply, card_bitvec, Nat.cast_pow, Nat.cast_ofNat]
-      congr
-      apply BitVec.eq_of_toNat_eq; simp
-    · intro b h_b hne
-      absurd hne
-      apply BitVec.eq_of_toNat_eq
-      have h_lt := b.isLt
-      have h_pow : 2 ^ (L - L) = 1 := by simp
-      rw [h_pow] at h_lt
-      simp [Nat.eq_zero_of_le_zero (Nat.le_of_lt_succ h_lt)]
-    · intro h; exact absurd (Finset.mem_univ _) h
+    -- ここで BitVec (L-L) の要素は一つだけという事実を使う
+    have huniq : ∀ b : BitVec (L - L), b = BitVec.zero (L - L) := by
+      intro b; apply BitVec.eq_of_toNat_eq; simp
+      have h : b.toNat < 2 ^ (L - L) := b.isLt
+      have h1 : 2 ^ (L - L) = 1 := by simp
+      omega
+    simp_rw [huniq]
+    conv_rhs =>
+      arg 1; arg 2; ext u_pre; arg 1; ext a;
+      rw [show BitVec.cast _ (BitVec.zero (L - L) ++ G' G L a) = G' G L a from by
+        apply BitVec.eq_of_toNat_eq; simp]
+    simp only [Bind.bind, PMF.bind_const]
+    exact DFunLike.congr rfl rfl
+
   rw [h_start, h_end]
   -- Flip direction: DistIndistinguishable is symmetric.
-  rw [show DistIndistinguishable (Hybrid G L L) (Hybrid G L 0) t ε ↔
-          DistIndistinguishable (Hybrid G L 0) (Hybrid G L L) t ε from by
-    unfold DistIndistinguishable; simp_rw [abs_sub_comm]]
-  -- Apply the hybrid transitivity lemma over all L steps.
+  rw [DistIndistinguishable_comm]
   apply transitivity (Hybrid G L) L t ε hL
   intro i hi
   exact Sequential_Extension_Step n L G i hi t ε cost_G h_G_secure
