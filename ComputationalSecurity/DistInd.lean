@@ -196,7 +196,7 @@ lemma DistIndistinguishable_bind {α β : Type} [Fintype α] [Fintype β]
           rw [← Finset.sum_mul]
           have h_tsum : ∑ a, X a = ∑' a, X a := (tsum_fintype _).symm
           rw [← ENNReal.toReal_sum]
-          · rw [h_tsum, tsum_coe]; simp
+          · rw [h_tsum, PMF.tsum_coe]; simp
           · intro a _; apply PMF.apply_ne_top
 
 end ComputationalSecurity

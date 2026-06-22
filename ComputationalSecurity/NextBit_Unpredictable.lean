@@ -141,7 +141,6 @@ lemma card_bitVec_getLsb_eq (n : ℕ) (hnpos : 0 < n) (i : Fin n) (b : Bool) :
     · exact hnpos
 
 
-
 lemma uniform_bitVec_getLsbD_uniform (n : ℕ) (hnpos : 0 < n) (i : Fin n) :
     (U n).map (fun x => x.getLsbD i.val) =
     PMF.uniformOfFintype Bool := by
@@ -316,8 +315,7 @@ lemma card_bitVec_pre_bit (L : ℕ) (i : Fin L) (pre : BitVec i.val) (b : Bool) 
     rw [h_reconstruct]
     exact (tripleEquiv i).symm_apply_apply x
 
-/-- U L を (x_pre, x_bit) のペアに map したものは、
-    独立な U i.val と一様コイントス (U 1) の直積分布に完全に等しい -/
+
 lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
     (U L).map (fun x => (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1))) =
     (do
@@ -325,91 +323,70 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
       let b ← PMF.uniformOfFintype Bool
       PMF.pure (pre, b)
     ) := by
-  apply PMF.ext
-  intro ⟨pre, b⟩
-  simp only [PMF.map_apply, Bind.bind, PMF.bind_apply, PMF.pure_apply, PMF.uniformOfFintype_apply]
-  rw [tsum_fintype]
-  simp only [U, PMF.uniformOfFintype_apply, card_bitvec, Fintype.card_bool]
-  -- LHS: (2^L)⁻¹ * #{x | extractLsb'=pre ∧ getLsbD=b}
-  -- RHS: (2^i)⁻¹ * (2)⁻¹
-  -- 必要: #{x : BitVec L | extractLsb'(L-i,i)=pre ∧ getLsbD(L-i-1)=b} = 2^(L-i-1)
-  simp only [Prod.mk.injEq, Nat.cast_pow, Nat.cast_ofNat, tsum_bool]
-  simp only [mul_ite, mul_one, mul_zero, tsum_fintype, ← Finset.mul_sum]
+  calc
+    (U L).map (fun x => (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1)))
+    -- Step 1: .map を do文に変換
+    _ = (do
+          let x ← U L
+          PMF.pure (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1)))
+        := by rfl  -- PMF.map の定義展開（map = bind ∘ pure ∘ f、機械的）
+    -- Step 1.5: x を tripleEquiv で分解した形に「書き換える」（まだ U L は1回のサンプリングのまま）
+    _ = (do
+          let x ← U L
+          let pre := (tripleEquiv i x).1
+          let b_vec := (tripleEquiv i x).2.1
+          let rest := (tripleEquiv i x).2.2
+          PMF.pure (pre, b_vec.getLsbD 0))
+        := by congr 1; funext x; congr 1
+              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, Prod.mk.injEq]
+              have h := (tripleEquiv_apply i x (x.extractLsb' (L - i.val) i.val)
+                        (x.getLsbD (L - i.val - 1))).mp ⟨rfl, rfl⟩
+              -- h : (tripleEquiv i x).1 = x.extractLsb' (L - i.val) i.val ∧
+              --     (tripleEquiv i x).2.1 = if x.getLsbD (L - i.val - 1) then 1 else 0
+              obtain ⟨h1, h2⟩ := h
+              constructor
+              · exact h1.symm
+              · rw [h2]
+                cases x.getLsbD (L - i.val - 1) <;> rfl
+    -- Step 2: U L が「pre, bit, rest の3分割」と同型であることを使い、3つの独立サンプリングに変形
+    _ = (do
+          let pre ← U i.val
+          let b_vec ← U 1
+          let rest ← U (L - i.val - 1)
+          PMF.pure (pre, b_vec.getLsbD 0))
+        := by unfold U
+              rw [uniformOfFintype_eq_bind3_of_equiv (tripleEquiv i)]
+              simp only [Equiv.invFun_as_coe, Bind.bind]
+              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, bind_bind, PMF.pure_bind,
+                Equiv.apply_symm_apply, bind_const]
+              congr; funext a; congr; funext b;
+              change PMF.map (Function.const _ (a, b[0])) (PMF.uniformOfFintype _)
+                      = PMF.pure (a, b[0])
+              exact PMF.map_const (uniformOfFintype (BitVec (L - ↑i - 1))) (a, b[0])
+    -- Step 3: 使われない rest を削除する
+    _ = (do
+          let pre ← U i.val
+          let b_vec ← U 1
+          PMF.pure (pre, b_vec.getLsbD 0))
+        := by congr 1; ext pre
+              congr 1; ext b_vec
+              congr ; ext b; congr ;
+              -- 確率の文法simp: let _ ← p; q = q
+              exact PMF.bind_const (U (L - i.val - 1)) (PMF.pure (pre, b.getLsbD 0))
+    -- Step 4: U 1 を Bool の一様分布に変換する
+    _ = (do
+          let pre ← U i.val
+          let b ← PMF.uniformOfFintype Bool
+          PMF.pure (pre, b))
+        := by congr 1; funext pre
+              rw [U1_eq_map_boolEquiv]
+              simp only [Bind.bind]
+              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, PMF.bind_map]
+              congr; funext b
+              simp only [Function.comp_apply]
+              congr
+              cases b <;> rfl
 
-  have hcard : ∀ (b : Bool),
-    ∑ x : BitVec L, (if pre = x.extractLsb' (L - i.val) i.val ∧
-                          x.getLsbD (L - i.val - 1) = b
-                      then ((2^L):ENNReal)⁻¹ else 0) = ((2^i.val))⁻¹ * 2⁻¹ := by
-      intro b
-      have h1: ((2 ^ L):ENNReal)⁻¹ = (2 ^ L)⁻¹ * 1 := by rw [mul_one]
-      have h2: 0 = ((2 ^ L):ENNReal)⁻¹*0 := by rw [mul_zero]
-      rw [h1, h2]
-      simp only [← mul_ite, ← Finset.mul_sum]
-      rw [show ∑ i_1 : BitVec L, (if pre = i_1.extractLsb' (L - i.val) i.val ∧
-          i_1.getLsbD (L - i.val - 1) = b then (1:ENNReal) else 0) =
-          ↑(Finset.univ.filter (fun x : BitVec L =>
-            pre = x.extractLsb' (L - i.val) i.val ∧
-            x.getLsbD (L - i.val - 1) = b)).card from by
-        simp [← Finset.sum_boole]
-        exact
-          Fintype.sum_congr
-            (fun a ↦
-              if pre = BitVec.extractLsb' (L - ↑i) (↑i) a ∧ a.getLsbD (L - ↑i - 1) = b then 1
-              else 0)
-            (fun a ↦
-              if pre = BitVec.extractLsb' (L - ↑i) (↑i) a ∧ a.getLsbD (L - ↑i - 1) = b then 1
-              else 0)
-            (congrFun rfl)]
-      rw [card_bitVec_pre_bit L i pre b]
-      push_cast
-      have hL : L = i.val + 1 + (L - i.val - 1) := by omega
-      have h_pow : (2 : ENNReal) ^ L =
-            ((2 : ENNReal) ^ i.val * 2) * (2 : ENNReal) ^ (L - i.val - 1) := by
-        symm
-        calc ((2 : ENNReal) ^ i.val * 2) * (2 : ENNReal) ^ (L - i.val - 1)
-          _ = ((2 : ENNReal) ^ i.val * (2 : ENNReal) ^ 1) * (2 : ENNReal) ^ (L - i.val - 1) := by
-            rw [pow_one]
-          _ = (2 : ENNReal) ^ (i.val + 1) * (2 : ENNReal) ^ (L - i.val - 1) := by rw [← pow_add]
-          _ = (2 : ENNReal) ^ (i.val + 1 + (L - i.val - 1)) := by rw [← pow_add]
-          _ = (2 : ENNReal) ^ L := by
-                congr 1
-                omega
-      rw [h_pow]
-      have h_inv : (((2 : ENNReal) ^ i.val * 2) * (2 : ENNReal) ^ (L - i.val - 1))⁻¹ =
-                  ((2 : ENNReal) ^ i.val * 2)⁻¹ * ((2 : ENNReal) ^ (L - i.val - 1))⁻¹ := by
-        apply ENNReal.mul_inv
-        · left
-          apply mul_ne_zero
-          · exact ENNReal.pow_ne_zero (by norm_num) _
-          · norm_num
-        · left
-          exact Ne.symm (not_eq_of_beq_eq_false rfl)
-      rw [h_inv]
-      rw [mul_assoc]
-      have h_cancel : ((2 : ENNReal) ^ (L - i.val - 1))⁻¹ * (2 : ENNReal) ^ (L - i.val - 1) = 1 := by
-        apply ENNReal.inv_mul_cancel
-        · exact ENNReal.pow_ne_zero (by norm_num) _  -- 0 ではない
-        · norm_num
-      rw [h_cancel, mul_one]
-      have h_inv2 : ((2 : ENNReal) ^ i.val * 2)⁻¹ = ((2 : ENNReal) ^ i.val)⁻¹ * 2⁻¹ := by
-        apply ENNReal.mul_inv
-        · left
-          exact ENNReal.pow_ne_zero (by norm_num) _  -- 0 ではない
-        · right
-          exact Ne.symm (NeZero.ne' 2)
-      rw [h_inv2]
-
-  cases b
-  · simp only [Bool.false_eq, and_true]
-    simp only [Bool.true_eq_false, and_false, ↓reduceIte, add_zero, Finset.sum_ite_eq,
-      Finset.mem_univ]
-    -- ⊢ (∑ x, if pre = BitVec.extractLsb' (L - ↑i) (↑i) x ∧ x.getLsbD (L - ↑i - 1) = false then (2 ^ L)⁻¹ else 0) = (2 ^ ↑i)⁻¹ * 2⁻¹
-    exact hcard false
-  · simp only [Bool.true_eq, and_true]
-    simp only [Bool.false_eq_true, and_false, ↓reduceIte, zero_add, Finset.sum_ite_eq,
-      Finset.mem_univ]
-    -- ⊢ (∑ x, if pre = BitVec.extractLsb' (L - ↑i) (↑i) x ∧ x.getLsbD (L - ↑i - 1) = true then (2 ^ L)⁻¹ else 0) = (2 ^ ↑i)⁻¹ * 2⁻¹
-    exact hcard true
 
 lemma Pr_AnyDist_eq_uniform_coin (AnyDist : PMF Bool) :
     Pr (do
@@ -428,7 +405,7 @@ lemma Pr_AnyDist_eq_uniform_coin (AnyDist : PMF Bool) :
   simp only [BEq.rfl, ↓reduceIte, mul_one, beq_true, Bool.true_eq_false, mul_zero, add_zero,
     beq_false, Bool.not_true, zero_add, one_div]
   -- 式は AnyDist false * (1 / 2) + AnyDist true * (1 / 2) になるので、1/2 でくくる
-  rw [← add_mul, ← tsum_bool, tsum_coe, one_mul]
+  rw [← add_mul, ← tsum_bool, PMF.tsum_coe, one_mul]
 
 /-- Lemma 2 (Core Lemma): Given the true uniform distribution U_L,
     the probability that any algorithm A correctly predicts the next bit is exactly 1/2. -/
@@ -450,7 +427,8 @@ lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
           congr 2
           simp only [PMF.map, Bind.bind]
           simp only [Function.comp_def]
-          simp only [bind_bind, PMF.pure_bind]
+          simp only [PMF.bind_bind]
+          simp only [PMF.pure_bind]
     _ = (Pr (do
           -- 2. あなたのアイデア！ペアを「独立な2つの分布」に置き換える
           let pair ← do

@@ -281,4 +281,86 @@ lemma h_split_U (i L : Nat) (hL : i < L) : U (L - i) = do
   · right; norm_num
   · right; norm_num
 
+lemma uniformOfFintype_map_equiv {α β : Type*}
+    [Fintype α] [Nonempty α] [Fintype β] [Nonempty β]
+    (e : α ≃ β) :
+    (PMF.uniformOfFintype α).map e = PMF.uniformOfFintype β := by
+  apply PMF.ext
+  intro b
+  simp only [map_apply, uniformOfFintype_apply]
+  rw [Fintype.card_congr e.symm]
+  rw [tsum_eq_single (e.symm b)]
+  · simp only [Equiv.apply_symm_apply, ↓reduceIte]
+  · intro c hc
+    have : b ≠ e c := by
+      by_contra;
+      rw [this] at hc
+      simp at hc
+    simp only [this, ↓reduceIte]
+
+/-- Bool と BitVec 1 の同型。最下位ビット(唯一のビット)とBoolの対応。 -/
+def boolEquiv : Bool ≃ BitVec 1 where
+  toFun b := if b then 1 else 0
+  invFun v := v.getLsbD 0
+  left_inv := by intro b; cases b <;> rfl
+  right_inv := by intro v; ext i hi; interval_cases i; simp; aesop
+
+lemma U1_eq_map_boolEquiv :
+    U 1 = (PMF.uniformOfFintype Bool).map boolEquiv := by
+  unfold U
+  rw [@uniformOfFintype_map_equiv]
+
+lemma uniformOfFintype_prod_eq_bind {α β : Type*}
+        [Fintype α] [Nonempty α] [Fintype β] [Nonempty β] :
+    PMF.uniformOfFintype (α × β) =
+      (PMF.uniformOfFintype α).bind (fun a => (PMF.uniformOfFintype β).map (Prod.mk a)) := by
+  apply PMF.ext
+  intro ⟨a, b⟩
+  rw [PMF.bind_apply]
+  simp only [PMF.map_apply, PMF.uniformOfFintype_apply]
+  rw [tsum_fintype]
+  rw [Finset.sum_eq_single a]
+  · simp only [Fintype.card_prod]
+    rw [tsum_fintype, Finset.sum_eq_single b]
+    · push_cast
+      rw [ENNReal.mul_inv]
+      · simp only [↓reduceIte]
+      · simp only [ne_eq, Nat.cast_eq_zero, Fintype.card_ne_zero, not_false_eq_true,
+        ENNReal.natCast_ne_top, or_self]
+      · simp only [ne_eq, ENNReal.natCast_ne_top, not_false_eq_true, Nat.cast_eq_zero,
+        Fintype.card_ne_zero, or_self]
+    · intro b' _ hne
+      simp only [Prod.mk.injEq, true_and, ite_eq_right_iff, ENNReal.inv_eq_zero,
+        ENNReal.natCast_ne_top, imp_false]
+      exact Ne.intro (id (Ne.symm hne))
+    · intro h; exact absurd (Finset.mem_univ _) h
+  · intro a' _ hne
+    simp only [tsum_fintype]
+    simp only [Prod.mk.injEq, mul_eq_zero, ENNReal.inv_eq_zero, ENNReal.natCast_ne_top,
+      Finset.sum_eq_zero_iff, Finset.mem_univ, ite_eq_right_iff, imp_false, not_and, forall_const,
+      forall_apply_eq_imp_iff, false_or]
+    exact Ne.intro (id (Ne.symm hne))
+  · intro h; exact absurd (Finset.mem_univ _) h
+
+example {β γ δ : Type*} (e : β × γ × δ ≃ β × γ × δ) (b : β) (c : γ) (d : δ) :
+    β × γ × δ := e.symm (b, c, d)
+#check Functor.map_map
+lemma uniformOfFintype_eq_bind3_of_equiv {α β γ δ : Type*}
+    [Fintype α] [Fintype β] [Fintype γ] [Fintype δ]
+    [Nonempty α] [Nonempty β] [Nonempty γ] [Nonempty δ]
+    (e : α ≃ β × γ × δ) :
+    PMF.uniformOfFintype α =
+      (PMF.uniformOfFintype β).bind (fun b =>
+        (PMF.uniformOfFintype γ).bind (fun c =>
+          (PMF.uniformOfFintype δ).bind (fun d =>
+            PMF.pure (e.invFun (b, c, d))))) := by
+  rw [← uniformOfFintype_map_equiv e.symm]
+  rw [uniformOfFintype_prod_eq_bind (α := β) (β := γ × δ)]
+  simp only [uniformOfFintype_prod_eq_bind (α := γ) (β := δ)]
+  simp only [PMF.map, PMF.map]
+  simp only [bind_bind, Function.comp_apply, PMF.pure_bind, Equiv.invFun_as_coe]
+
+
+
+
 end ComputationalSecurity
