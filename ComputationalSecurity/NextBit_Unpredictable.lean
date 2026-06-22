@@ -1,3 +1,33 @@
+/-
+  NextBit_Unpredictable.lean
+
+  Formalizes the direction "pseudorandomness implies next-bit unpredictability"
+  of Theorem 4.2 from the textbook.
+
+  Main definitions:
+    - Pr_predict_success : probability that algorithm A correctly predicts the
+        (i+1)-th bit of a sample from X, given the first i bits.
+    - NextBitUnpredictable : Definition 4.5; no efficient algorithm predicts
+        the next bit with probability greater than 1/2 + ε/2.
+    - predictor_to_distinguisher : reduction turning a next-bit predictor into
+        a distribution distinguisher.
+
+  Main results:
+    - PrDX_one_U_predictor_eq_half : for the true uniform distribution U_L,
+        every predictor succeeds with probability exactly 1/2.
+    - pseudorandom_implies_unpredictable : (t+t_extract, ε/2)-pseudorandomness
+        implies (t, ε)-next-bit unpredictability.
+
+  Key infrastructure (proved here):
+    - castEquiv       : canonical equivalence BitVec n ≃ BitVec m when n = m.
+    - tripleEquiv     : equivalence BitVec L ≃ BitVec i × BitVec 1 × BitVec (L-i-1)
+                        splitting an L-bit vector into prefix, one bit, and suffix.
+    - tripleEquiv_apply : characterizes tripleEquiv component-wise via extractLsb'/getLsbD.
+    - U_map_pre_bit   : mapping a uniform L-bit sample to (prefix, bit) equals
+                        independent sampling of the prefix and a uniform coin.
+
+  Authors: Yasuaki Honda
+-/
 import ComputationalSecurity.DistInd
 import Mathlib.Data.Nat.Size
 import Mathlib.Data.Nat.Bitwise
@@ -56,31 +86,37 @@ lemma Pr_predict_success_eq_PrDX_one {L : ℕ} (X : PMF (BitVec L)) (i : Fin L)
     simp only [Fin.isValue, PMF.pure_bind, BEq.rfl]
 
 
-/-- 長さが等しい BitVec 同士のキャスト同型 -/
+/-- Canonical equivalence between `BitVec n` and `BitVec m` when `n = m`,
+    given by `BitVec.cast`. -/
 def castEquiv {n m : ℕ} (h : n = m) : BitVec n ≃ BitVec m where
   toFun x := x.cast h
   invFun x := x.cast h.symm
   left_inv x := by simp
   right_inv x := by simp
 
-/-- あなたのアイデア：BitVec L と 3つの BitVec の直積の完全な同型！ -/
+/-- Equivalence splitting a `BitVec L` into three independent parts:
+    the upper `i` bits (prefix), one middle bit, and the lower `L-i-1` bits (suffix).
+    This is the key structural decomposition underlying `U_map_pre_bit`. -/
 def tripleEquiv {L : ℕ} (i : Fin L) :
-    BitVec L ≃ BitVec i.val × BitVec 1 × BitVec (L - i.val - 1) :=
+    BitVec L ≃ BitVec i × BitVec 1 × BitVec (L - i - 1) :=
   calc BitVec L
-    _ ≃ BitVec (i.val + (L - i.val)) := castEquiv (by omega)
-    _ ≃ BitVec i.val × BitVec (L - i.val) := bitvec_equiv i.val (L - i.val)
-    _ ≃ BitVec i.val × BitVec (1 + (L - i.val - 1)) :=
+    _ ≃ BitVec (i + (L - i)) := castEquiv (by omega)
+    _ ≃ BitVec i × BitVec (L - i) := bitvec_equiv i (L - i)
+    _ ≃ BitVec i × BitVec (1 + (L - i - 1)) :=
             Equiv.prodCongr (Equiv.refl _) (castEquiv (by omega))
-    _ ≃ BitVec i.val × (BitVec 1 × BitVec (L - i.val - 1)) :=
-            Equiv.prodCongr (Equiv.refl _) (bitvec_equiv 1 (L - i.val - 1))
+    _ ≃ BitVec i × (BitVec 1 × BitVec (L - i - 1)) :=
+            Equiv.prodCongr (Equiv.refl _) (bitvec_equiv 1 (L - i - 1))
 
 
-lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i.val) (b : Bool) :
-    (pre = x.extractLsb' (L - i.val) i.val ∧ x.getLsbD (L - i.val - 1) = b) ↔
+/-- Characterizes `tripleEquiv` component-wise:
+    the first component equals `extractLsb'` (the upper `i` bits),
+    and the second component equals the single-bit encoding of `getLsbD`. -/
+lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i) (b : Bool) :
+    (pre = x.extractLsb' (L - i) i ∧ x.getLsbD (L - i - 1) = b) ↔
     ((tripleEquiv i x).1 = pre ∧ (tripleEquiv i x).2.1 = if b then 1 else 0) := by
 
-  -- 1. 第1成分が extractLsb' に一致することの証明
-  have h_part1 : (tripleEquiv i x).1 = x.extractLsb' (L - i.val) i.val := by
+  -- 1. The first component matches extractLsb'.
+  have h_part1 : (tripleEquiv i x).1 = x.extractLsb' (L - i) i := by
     dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
     apply BitVec.eq_of_getLsbD_eq; intro j
     simp only [BitVec.getLsbD_extractLsb']
@@ -88,15 +124,15 @@ lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i.val
     · aesop
     · omega
 
-  -- 2. 第2成分が 1ビットの抽出に一致することの証明
-  have h_part2 : (tripleEquiv i x).2.1 = x.extractLsb' (L - i.val - 1) 1 := by
+  -- 2. The second component matches the 1-bit extraction.
+  have h_part2 : (tripleEquiv i x).2.1 = x.extractLsb' (L - i - 1) 1 := by
     dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
     apply BitVec.eq_of_getLsbD_eq; intro j
     simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_cast, Nat.lt_one_iff, zero_add]
     aesop
 
-  -- 3. Bool の等式と BitVec 1 の等式の同値性の証明
-  have h_bool : (x.getLsbD (L - i.val - 1) = b) ↔ (x.extractLsb' (L - i.val - 1) 1 = if b then 1 else 0) := by
+  -- 3. Equivalence between the Bool equality and the BitVec 1 equality.
+  have h_bool : (x.getLsbD (L - i - 1) = b) ↔ (x.extractLsb' (L - i - 1) 1 = if b then 1 else 0) := by
     constructor
     · -- (→) の証明：b で場合分けし、両方のブランチを同時に simp で潰す
       intro h
@@ -106,28 +142,33 @@ lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i.val
     · -- (←) の証明：congrArg で 0番目のビットを取り出し、両ブランチを同時に潰す
       intro h
       have h0 := congrArg (fun v => BitVec.getLsbD v 0) h
-      cases b <;> simp [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero] at h0 <;> exact h0
+      cases b <;> simp [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero]
+                        at h0 <;> exact h0
 
-  -- 4. 組み上げ
+  -- 4. Combine the three facts.
   rw [h_part1, h_part2, ← h_bool]
   exact and_congr eq_comm Iff.rfl
 
 
+/-- Mapping a uniform `L`-bit sample to `(prefix, bit)` equals independent sampling:
+    the upper `i` bits are uniform over `BitVec i`, and the selected bit is a uniform
+    coin flip, with both drawn independently.
+    This is the core probabilistic decomposition used in `PrDX_one_U_predictor_eq_half`. -/
 lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
-    (U L).map (fun x => (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1))) =
+    (U L).map (fun x => (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1))) =
     (do
-      let pre ← U i.val
+      let pre ← U i
       let b ← PMF.uniformOfFintype Bool
       PMF.pure (pre, b)
     ) := by
   calc
-    (U L).map (fun x => (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1)))
-    -- Step 1: .map を do文に変換
+    (U L).map (fun x => (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
+    -- Step 1: Rewrite .map as a do-expression.
     _ = (do
           let x ← U L
-          PMF.pure (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1)))
-        := by rfl  -- PMF.map の定義展開（map = bind ∘ pure ∘ f、機械的）
-    -- Step 1.5: x を tripleEquiv で分解した形に「書き換える」（まだ U L は1回のサンプリングのまま）
+          PMF.pure (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
+        := by rfl  -- PMF.map unfolds to bind/pure by definition.
+    -- Step 1.5: Rewrite the projection functions via tripleEquiv (U L is still one sample).
     _ = (do
           let x ← U L
           let pre := (tripleEquiv i x).1
@@ -136,20 +177,21 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
           PMF.pure (pre, b_vec.getLsbD 0))
         := by congr 1; funext x; congr 1
               simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, Prod.mk.injEq]
-              have h := (tripleEquiv_apply i x (x.extractLsb' (L - i.val) i.val)
-                        (x.getLsbD (L - i.val - 1))).mp ⟨rfl, rfl⟩
-              -- h : (tripleEquiv i x).1 = x.extractLsb' (L - i.val) i.val ∧
-              --     (tripleEquiv i x).2.1 = if x.getLsbD (L - i.val - 1) then 1 else 0
+              have h := (tripleEquiv_apply i x (x.extractLsb' (L - i) i)
+                        (x.getLsbD (L - i - 1))).mp ⟨rfl, rfl⟩
+              -- h : (tripleEquiv i x).1 = x.extractLsb' (L-i) i
+              --   ∧ (tripleEquiv i x).2.1 = if x.getLsbD (L-i-1) then 1 else 0
               obtain ⟨h1, h2⟩ := h
               constructor
               · exact h1.symm
               · rw [h2]
-                cases x.getLsbD (L - i.val - 1) <;> rfl
-    -- Step 2: U L が「pre, bit, rest の3分割」と同型であることを使い、3つの独立サンプリングに変形
+                cases x.getLsbD (L - i - 1) <;> rfl
+    -- Step 2: Replace the single U L sample with three independent samples
+    --          using the equivalence tripleEquiv and uniformOfFintype_eq_bind3_of_equiv.
     _ = (do
-          let pre ← U i.val
+          let pre ← U i
           let b_vec ← U 1
-          let rest ← U (L - i.val - 1)
+          let rest ← U (L - i - 1)
           PMF.pure (pre, b_vec.getLsbD 0))
         := by unfold U
               rw [uniformOfFintype_eq_bind3_of_equiv (tripleEquiv i)]
@@ -160,19 +202,19 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
               change PMF.map (Function.const _ (a, b[0])) (PMF.uniformOfFintype _)
                       = PMF.pure (a, b[0])
               exact PMF.map_const (uniformOfFintype (BitVec (L - ↑i - 1))) (a, b[0])
-    -- Step 3: 使われない rest を削除する
+    -- Step 3: Drop the unused `rest` sample.
     _ = (do
-          let pre ← U i.val
+          let pre ← U i
           let b_vec ← U 1
           PMF.pure (pre, b_vec.getLsbD 0))
         := by congr 1; ext pre
               congr 1; ext b_vec
               congr ; ext b; congr ;
-              -- 確率の文法simp: let _ ← p; q = q
-              exact PMF.bind_const (U (L - i.val - 1)) (PMF.pure (pre, b.getLsbD 0))
-    -- Step 4: U 1 を Bool の一様分布に変換する
+              -- PMF.bind_const: (do let _ ← p; q) = q
+              exact PMF.bind_const (U (L - i - 1)) (PMF.pure (pre, b.getLsbD 0))
+    -- Step 4: Convert U 1 to the uniform distribution over Bool via boolEquiv.
     _ = (do
-          let pre ← U i.val
+          let pre ← U i
           let b ← PMF.uniformOfFintype Bool
           PMF.pure (pre, b))
         := by congr 1; funext pre
@@ -185,6 +227,8 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
               cases b <;> rfl
 
 
+/-- For any distribution `AnyDist` over `Bool`, guessing against an independent
+    uniform coin flip succeeds with probability exactly 1/2. -/
 lemma Pr_AnyDist_eq_uniform_coin (AnyDist : PMF Bool) :
     Pr (do
       let a ← AnyDist
@@ -195,31 +239,25 @@ lemma Pr_AnyDist_eq_uniform_coin (AnyDist : PMF Bool) :
   simp only [Bind.bind, PMF.bind_apply]
   rw [tsum_bool]
   simp only [tsum_bool]
-  -- 一様分布の確率(1/2)と、pureの確率(if文)を展開
   simp only [PMF.uniformOfFintype_apply, Fintype.card_bool, Nat.cast_ofNat, PMF.pure_apply]
-  -- Boolの比較 (false == false, false == true 等) と 0, 1 の掛け算を簡約
-  -- これにより、各項が AnyDist a * (1/2 * 1 + 1/2 * 0) のように整理される
   simp only [BEq.rfl, ↓reduceIte, mul_one, beq_true, Bool.true_eq_false, mul_zero, add_zero,
     beq_false, Bool.not_true, zero_add, one_div]
-  -- 式は AnyDist false * (1 / 2) + AnyDist true * (1 / 2) になるので、1/2 でくくる
   rw [← add_mul, ← tsum_bool, PMF.tsum_coe, one_mul]
 
-/-- Lemma 2 (Core Lemma): Given the true uniform distribution U_L,
-    the probability that any algorithm A correctly predicts the next bit is exactly 1/2. -/
+/-- Core lemma: for the true uniform distribution `U L`, every next-bit predictor
+    succeeds with probability exactly 1/2, regardless of the index `i` or algorithm `A`. -/
 lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
     (A : BitVec i → PMF Bool) :
     PrDX_one (U L) (predictor_to_distinguisher i A) = 1 / 2 := by
   rw [← Pr_predict_success_eq_PrDX_one]
-
   calc
     Pr_predict_success (U L) i A
       = (Pr (do
-          -- 1. x への依存を map で (x_pre, x_bit) のペアに抽出する
-          let pair ← (U L).map (fun x => (x.extractLsb' (L - i.val) i.val, x.getLsbD (L - i.val - 1)))
+          -- 1. Extract (prefix, bit) from x via map.
+          let pair ← (U L).map (fun x => (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
           let a ← A pair.1
           PMF.pure (a == pair.2)
         )).toReal := by
-          -- ここは Pr_predict_success の定義と PMF.bind_map などで自明に変形できます
           unfold Pr_predict_success
           congr 2
           simp only [PMF.map, Bind.bind]
@@ -227,34 +265,32 @@ lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
           simp only [PMF.bind_bind]
           simp only [PMF.pure_bind]
     _ = (Pr (do
-          -- 2. あなたのアイデア！ペアを「独立な2つの分布」に置き換える
+          -- 2. Replace the joint sample with two independent samples via U_map_pre_bit.
           let pair ← do
-            let pre ← U i.val
+            let pre ← U i
             let b ← PMF.uniformOfFintype Bool
             PMF.pure (pre, b)
           let a ← A pair.1
           PMF.pure (a == pair.2)
         )).toReal := by
-          -- ここで先ほどのペア抽出補題を適用します
           congr 1
           rw [U_map_pre_bit i]
           simp only [bind_assoc]
     _ = (Pr (do
-          -- 3. あとはモナド結合則 (bind_assoc) で AnyDist の形に持ち込むだけ
+          -- 3. Flatten via bind_assoc to reach the form required by Pr_AnyDist_eq_uniform_coin.
           let a ← (do
-            let pre ← U i.val
+            let pre ← U i
             A pre)
           let b ← PMF.uniformOfFintype Bool
           PMF.pure (a == b)
         )).toReal := by
-          -- 結合則だけで通ります
           congr 2
           simp only [bind_assoc]
           simp only [Bind.bind, PMF.pure_bind]
           congr; funext x
           rw [PMF.bind_comm]
     _ = ((1 / 2 : ENNReal)).toReal := by
-          -- 4. 独立して証明した AnyDist の補題を適用
+          -- 4. Apply Pr_AnyDist_eq_uniform_coin.
           congr 1
           exact Pr_AnyDist_eq_uniform_coin _
     _ = 1 / 2 := by norm_num
@@ -271,12 +307,12 @@ theorem pseudorandom_implies_unpredictable {L : ℕ} (X : PMF (BitVec L))
   unfold NextBitUnpredictable
   intro i A tA htA
 
-  -- Construct a distinguisher D from the predicting algorithm A.
+  -- Build a distinguisher D from the predictor A.
   let D := predictor_to_distinguisher i A
   let tD := tA + t_extract
   have htD : tD ≤ t + t_extract := Nat.add_le_add_right htA t_extract
 
-  -- Apply the pseudorandomness assumption (DistIndistinguishable) to D.
+  -- Apply the pseudorandomness hypothesis to D.
   have h_bound := h_indist D tD htD
 
   have h_eq1 : Pr_predict_success X i A = PrDX_one X D :=
@@ -286,15 +322,13 @@ theorem pseudorandom_implies_unpredictable {L : ℕ} (X : PMF (BitVec L))
 
   rw [← h_eq1, h_eq2] at h_bound
 
-  -- Cast the division of NNReal to the division of ℝ to align the expressions.
+  -- Align NNReal and ℝ division.
   have h_cast : ((ε / 2 : NNReal) : ℝ) = (ε : ℝ) / 2 := by
     push_cast
     rfl
   rw [h_cast] at h_bound
 
-  -- h_bound is |Pr_predict_success X i hi A - 1 / 2| ≤ ε / 2.
-  -- We want to show Pr_predict_success X i hi A ≤ 1 / 2 + ε / 2.
-  -- This trivially follows from the property of absolute value (x - y ≤ |x - y|) and linarith.
+  -- |Pr_predict_success - 1/2| ≤ ε/2 implies Pr_predict_success ≤ 1/2 + ε/2.
   have h_abs := le_of_abs_le h_bound
   linarith
 

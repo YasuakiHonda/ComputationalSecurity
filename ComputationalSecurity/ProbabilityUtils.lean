@@ -21,6 +21,13 @@
     - bitvec_add_comm_equiv: equivalence swapping summation order for BitVec.
     - sum_bitvec_n_plus_one: splitting a sum over BitVec (n+1) into a double sum.
     - h_split_U: splitting U (L-i) into a prefix and a 1-bit suffix.
+    - uniformOfFintype_map_equiv: uniform distribution is preserved under equivalences.
+    - boolEquiv: equivalence Bool ≃ BitVec 1 via the least-significant bit.
+    - U1_eq_map_boolEquiv: U 1 equals the uniform Bool distribution mapped via boolEquiv.
+    - uniformOfFintype_prod_eq_bind: uniform distribution over α × β equals
+      independent sampling of each component.
+    - uniformOfFintype_eq_bind3_of_equiv: uniform distribution over α, given an
+      equivalence α ≃ β × γ × δ, equals three independent binds.
 
   Authors: Yasuaki Honda
 -/
@@ -82,11 +89,11 @@ lemma Pr_compl (p : PMF Bool) :
 lemma PMF.tsum_mul_le_one {α : Type*} (p : PMF α) (f : α → ENNReal) (hf : ∀ x, f x ≤ 1) :
     (∑' x, p x * f x) ≤ 1 := by
   calc (∑' x, p x * f x)
-    -- 各項において p x * f x ≤ p x * 1 = p x を使う
+    -- For each term, p x * f x ≤ p x * 1 = p x.
     _ ≤ ∑' x, p x := by
       apply ENNReal.tsum_le_tsum
       exact fun a ↦ mul_le_of_le_one_right' (hf a)
-    -- PMF の定義より ∑' x, p x = 1
+    -- By definition of PMF, ∑' x, p x = 1.
     _ = 1         := p.tsum_coe
 
 /-- A useful corollary: the expectation of any bounded function is never top (infinity). -/
@@ -281,6 +288,8 @@ lemma h_split_U (i L : Nat) (hL : i < L) : U (L - i) = do
   · right; norm_num
   · right; norm_num
 
+/-- The uniform distribution over `α` is preserved under any equivalence `e : α ≃ β`:
+    mapping by `e` yields the uniform distribution over `β`. -/
 lemma uniformOfFintype_map_equiv {α β : Type*}
     [Fintype α] [Nonempty α] [Fintype β] [Nonempty β]
     (e : α ≃ β) :
@@ -298,18 +307,24 @@ lemma uniformOfFintype_map_equiv {α β : Type*}
       simp at hc
     simp only [this, ↓reduceIte]
 
-/-- Bool と BitVec 1 の同型。最下位ビット(唯一のビット)とBoolの対応。 -/
+/-- Equivalence between `Bool` and `BitVec 1` via the least-significant bit:
+    `true` maps to `1#1` and `false` maps to `0#1`. -/
 def boolEquiv : Bool ≃ BitVec 1 where
   toFun b := if b then 1 else 0
   invFun v := v.getLsbD 0
   left_inv := by intro b; cases b <;> rfl
   right_inv := by intro v; ext i hi; interval_cases i; simp; aesop
 
+/-- The uniform distribution `U 1` over `BitVec 1` equals the uniform distribution
+    over `Bool` mapped through `boolEquiv`. -/
 lemma U1_eq_map_boolEquiv :
     U 1 = (PMF.uniformOfFintype Bool).map boolEquiv := by
   unfold U
   rw [@uniformOfFintype_map_equiv]
 
+/-- The uniform distribution over a product type `α × β` equals independent sampling:
+    first draw `a` uniformly from `α`, then draw `b` uniformly from `β`.
+    This is the fundamental decomposition underlying `uniformOfFintype_eq_bind3_of_equiv`. -/
 lemma uniformOfFintype_prod_eq_bind {α β : Type*}
         [Fintype α] [Nonempty α] [Fintype β] [Nonempty β] :
     PMF.uniformOfFintype (α × β) =
@@ -342,9 +357,10 @@ lemma uniformOfFintype_prod_eq_bind {α β : Type*}
     exact Ne.intro (id (Ne.symm hne))
   · intro h; exact absurd (Finset.mem_univ _) h
 
-example {β γ δ : Type*} (e : β × γ × δ ≃ β × γ × δ) (b : β) (c : γ) (d : δ) :
-    β × γ × δ := e.symm (b, c, d)
-#check Functor.map_map
+/-- Given an equivalence `e : α ≃ β × γ × δ`, the uniform distribution over `α`
+    equals three nested independent binds over `β`, `γ`, and `δ`.
+    Proved by applying `uniformOfFintype_map_equiv` and `uniformOfFintype_prod_eq_bind` twice,
+    without descending to `tsum`. -/
 lemma uniformOfFintype_eq_bind3_of_equiv {α β γ δ : Type*}
     [Fintype α] [Fintype β] [Fintype γ] [Fintype δ]
     [Nonempty α] [Nonempty β] [Nonempty γ] [Nonempty δ]
