@@ -4,7 +4,9 @@ A Lean 4 + Mathlib 4 formalization of computational security for symmetric encry
 covering the equivalence between **Semantic Security** and **Indistinguishability** (Chapter 3),
 and **Pseudorandomness** including computational indistinguishability of distributions,
 the Hybrid Argument, security under PRG-based key generation,
-and the **PRG Sequential Extension** (Theorem 4.1) — constructing an L-bit PRG from a 1-bit PRG.
+the **PRG Sequential Extension** (Theorem 4.1) — constructing an L-bit PRG from a 1-bit PRG,
+and **Next-Bit Unpredictability** (Theorem 4.2, direction: pseudorandomness implies
+next-bit unpredictability).
 
 Based on: Yasunaga, *Computational Security* (textbook), Chapters 3 and 4.
 
@@ -54,6 +56,16 @@ Both theorems are fully proved with no `sorry`.
   Proved via an L-step hybrid argument (`Hybrid 0 = U L` through `Hybrid L = G'_dist`).
   Fully proved with no `sorry`.
 
+- **Definition 4.5 — Next-Bit Unpredictability** (`NextBit_Unpredictable.lean`):
+  No efficient algorithm can predict the next bit of a pseudorandom sequence given
+  all preceding bits with probability greater than 1/2 + ε/2.
+- **Theorem 4.2 (direction: PRG → NB unpredictable)** (`NextBit_Unpredictable.lean`):
+  If `G'` is `(t + t_extract, ε/2)`-pseudorandom, then `G'` is `(t, ε)`-next-bit
+  unpredictable. Proved via a reduction `predictor_to_distinguisher` and the key lemma
+  `PrDX_one_U_predictor_eq_half` (for the true uniform distribution, every predictor
+  succeeds with probability exactly 1/2).
+  Fully proved with no `sorry`.
+
 All results are fully proved with no `sorry`.
 
 ## Build
@@ -80,6 +92,7 @@ ComputationalSecurity/
     ├── DistInd.lean                  # Chapter 4: Def 4.1, Prop 4.1, Hybrid Argument
     ├── PRGDefs.lean                  # Def 4.3, 4.4: IsPseudorandom, IsPRG
     ├── PRG_Sequential_Extension.lean # Theorem 4.1: PRG Sequential Extension
+    ├── NextBit_Unpredictable.lean    # Theorem 4.2: PRG implies Next-Bit Unpredictability
     └── ShortKey_CompSec.lean         # OTP, Security Transfer, FixedMessageIndistinguishable
 ```
 
@@ -87,6 +100,11 @@ ComputationalSecurity/
 
 ### `ProbabilityUtils.lean`
 Shared utilities used throughout the project. Defines `Bit` (`Fin 2`), `randomBit` (uniform PMF over `Bit`), `Pr` (probability of a `PMF Bool` outputting `true`), and `U` (the uniform distribution over `BitVec n`). Also provides `bitvec_equiv`, `card_bitvec`, `U_add_dist`, `h_split_U`, and related BitVec combinatorial lemmas used in the PRG Sequential Extension proof. Helper lemmas for ENNReal arithmetic and PMF bounds are also included.
+
+Recent additions include `uniformOfFintype_map_equiv` (uniform distribution preserved under
+equivalences), `boolEquiv` (`Bool ≃ BitVec 1`), `U1_eq_map_boolEquiv`,
+`uniformOfFintype_prod_eq_bind`, and `uniformOfFintype_eq_bind3_of_equiv` — infrastructure
+lemmas enabling `tsum`-free proofs at the `map`/`bind`/`Equiv` abstraction level.
 
 ### `Defs.lean`
 Core definitions of the two security notions, following the textbook.
@@ -148,6 +166,21 @@ Formalizes Theorem 4.1 and its supporting construction (Figure 4.2).
 - `PRG_Sequential_Extension`: the main theorem — if `G` is `(t + L·cost_G, ε/L)`-secure,
   then `G'` is `(t, ε)`-secure.
 
+### `NextBit_Unpredictable.lean`
+Formalizes the direction "pseudorandomness implies next-bit unpredictability" of Theorem 4.2.
+
+- `Pr_predict_success`: probability that algorithm `A` correctly predicts the `(i+1)`-th bit
+  of a sample from `X`, given the first `i` bits.
+- `NextBitUnpredictable`: Definition 4.5.
+- `predictor_to_distinguisher`: reduction turning a next-bit predictor into a distinguisher.
+- `tripleEquiv`: equivalence `BitVec L ≃ BitVec i × BitVec 1 × BitVec (L-i-1)`,
+  the key structural decomposition for the proof.
+- `U_map_pre_bit`: mapping a uniform `L`-bit sample to `(prefix, bit)` equals independent
+  sampling — proved at the `map`/`bind`/`Equiv` level without descending to `tsum`.
+- `PrDX_one_U_predictor_eq_half`: for the true uniform distribution `U L`, every predictor
+  succeeds with probability exactly 1/2.
+- `pseudorandom_implies_unpredictable`: the main theorem.
+
 ### `ShortKey_CompSec.lean`
 Definitions and theorems connecting perfect secrecy, PRGs, and computational security.
 
@@ -177,6 +210,7 @@ Definitions and theorems connecting perfect secrecy, PRGs, and computational sec
 | `St` type parameter for adversary state | Enables stateful adversaries without fixing a concrete state type |
 | `NNReal` for advantage bound `ε` | Matches textbook (ε ≥ 0); simplifies inequality reasoning |
 | `do`-notation for PMF | Consistent with the `Hybrid` definition style; avoids `bind`/`map` syntax mismatch |
+| `map`/`bind`/`Equiv` abstraction for proofs | Proofs of distribution equalities are kept at the `PMF.map`/`bind`/`Equiv` level; descent to `tsum`/`Finset.sum` is limited to a small set of infrastructure lemmas (`uniformOfFintype_map_equiv`, `uniformOfFintype_prod_eq_bind`) |
 
 ## Authors
 
