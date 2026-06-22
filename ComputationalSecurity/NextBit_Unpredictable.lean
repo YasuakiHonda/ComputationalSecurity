@@ -41,20 +41,11 @@ def predictor_to_distinguisher {L : ℕ} (i : Fin L)
 lemma Pr_predict_success_eq_PrDX_one {L : ℕ} (X : PMF (BitVec L)) (i : Fin L)
     (A : BitVec i → PMF (Bool)) :
     Pr_predict_success X i A = PrDX_one X (predictor_to_distinguisher i A) := by
-  -- Expand all definitions
   unfold Pr_predict_success PrDX_one predictor_to_distinguisher
-
-  -- We want to prove equality inside `.toReal` and `Pr`.
-  -- `congr 2` strips off `.toReal` and `Pr`, leaving the inner PMF Bool to be compared.
   congr 2
-
-  -- Flatten the nested `bind` operations using monad associativity and `pure_bind`
   simp only [bind_assoc]
-
-  -- Step inside the binders `fun x => ...` and `fun a => ...`
   congr; funext x
   congr; funext a
-
   -- The equality reduces to proving:
   -- (a == x.extractLsb' (L - i - 1) 1) = ((if a == x.extractLsb' (L - i - 1) 1 then 1 else 0) == 1)
   -- Since `a == ...` is a Bool, we can just do case analysis on it (true or false).
@@ -64,128 +55,6 @@ lemma Pr_predict_success_eq_PrDX_one {L : ℕ} (X : PMF (BitVec L)) (i : Fin L)
   · simp only [Bind.bind,↓reduceIte, Fin.isValue]
     simp only [Fin.isValue, PMF.pure_bind, BEq.rfl]
 
-def bit0Set (n : Nat) (i : Fin n) : Finset (BitVec n) :=
-  Finset.univ.filter (fun x => x.getLsbD i = false)
-
-def bit1Set (n : Nat) (i : Fin n) : Finset (BitVec n) :=
-  Finset.univ.filter (fun x => x.getLsbD i = true)
-
-theorem card_bit0_eq_card_bit1 (n : Nat) (i : Fin n) :
-    (bit0Set n i).card = (bit1Set n i).card := by
-  have hmask : (BitVec.twoPow n i).getLsbD i = true := by
-    simp only [BitVec.getLsbD_twoPow, decide_true, Bool.and_true, i.isLt]
-  apply Finset.card_bij (fun x _ => x ^^^ BitVec.twoPow n i)
-  · -- bit0Set → bit1Set
-    intro x hx
-    simp only [bit0Set, bit1Set, Finset.mem_filter, Finset.mem_univ,
-               true_and] at *
-    simp only [BitVec.getLsbD_xor, hx, hmask]
-    simp
-  · -- 単射
-    intro x _ y _ h
-    exact (BitVec.xor_left_inj _).mp h
-  · -- 全射
-    intro y hy
-    refine ⟨y ^^^ BitVec.twoPow n i, ?_, ?_⟩
-    · simp only [bit0Set, Finset.mem_filter, Finset.mem_univ, true_and]
-      simp only [bit1Set, Finset.mem_filter, Finset.mem_univ,
-                 true_and] at hy
-      simp only [BitVec.getLsbD_xor, hy, hmask]
-      simp only [bne_self_eq_false]
-    · simp [BitVec.xor_assoc, BitVec.xor_self]
-
-theorem pow_sub_one_eq (n x : Nat) (hnpos : 0 < n)
-              (h : 2 ^ n = 2 * x) : 2 ^ (n - 1) = x := by
-  -- 1. n が 0 かそれ以外（succ m）かで場合分けする
-  cases n with
-  | zero =>
-    contradiction
-  | succ m =>
-    rw [Nat.pow_succ'] at h
-    have : m+1-1=m := by exact Nat.add_sub_self_right m 1
-    rw [this]
-    omega
-
-lemma card_bitVec_getLsb_eq (n : ℕ) (hnpos : 0 < n) (i : Fin n) (b : Bool) :
-    (Finset.univ.filter (fun x : BitVec n => x.getLsbD i = b)).card = 2 ^ (n - 1) := by
-  -- bit0Set ∪ bit1Set = univ、共通部分は空 を使う
-  have hi : i<n := by exact i.isLt
-  have huniv : bit0Set n i ∪ bit1Set n i = Finset.univ := by
-    ext x
-    simp [bit0Set, bit1Set, Finset.mem_filter]
-  have hdisj : Disjoint (bit0Set n i) (bit1Set n i) := by
-    simp [Finset.disjoint_filter, bit0Set, bit1Set]
-  have hcard : (bit0Set n i).card = (bit1Set n i).card :=
-    card_bit0_eq_card_bit1 n i
-  have htotal : (Finset.univ : Finset (BitVec n)).card = 2 ^ n := by
-    simp [card_bitvec]  -- 名前要確認
-  -- b = false と b = true で場合分け
-  cases b
-  · -- b = false: card (bit0Set) = 2^(n-1)
-    change (bit0Set n i).card = 2 ^ (n - 1)
-    have := Finset.card_union_of_disjoint hdisj
-    rw [huniv, htotal, ← hcard] at this
-    have add_self_two_mul (a : Nat): a+a=2*a := by ring
-    rw [add_self_two_mul] at this
-    apply pow_sub_one_eq at this
-    · rw [this]
-    · exact hnpos
-  · -- b = true: card (bit1Set) = 2^(n-1)
-    change (bit1Set n i).card = 2 ^ (n - 1)
-    have := Finset.card_union_of_disjoint hdisj
-    rw [huniv, htotal, hcard] at this
-    have add_self_two_mul (a : Nat): a+a=2*a := by ring
-    rw [add_self_two_mul] at this
-    apply pow_sub_one_eq at this
-    · rw [this]
-    · exact hnpos
-
-
-lemma uniform_bitVec_getLsbD_uniform (n : ℕ) (hnpos : 0 < n) (i : Fin n) :
-    (U n).map (fun x => x.getLsbD i.val) =
-    PMF.uniformOfFintype Bool := by
-  unfold U
-  apply PMF.ext
-  intro b
-  simp only [PMF.map_apply, PMF.uniformOfFintype_apply]
-  -- tsum を Finset.sum に変換
-  rw [tsum_fintype]
-  simp only [Fintype.card_bool, Nat.cast_ofNat, card_bitvec]
-  have h_one_mul_a: ((@Nat.cast ENNReal) (2 ^ n))⁻¹ = (↑(2 ^ n))⁻¹*(1:Nat) := by
-    norm_cast
-    rw [mul_one]
-  have h_zero_mul_a: (0:ENNReal) = (↑(2 ^ n))⁻¹*0 := by rw [mul_zero]
-  rw [h_one_mul_a, h_zero_mul_a]
-  simp_rw [← mul_ite, ← Finset.mul_sum]
-  have hsum : ∑ x : BitVec n, (if b = x.getLsbD i.val then 1 else 0 : ENNReal) = 2^(n-1) := by
-    have : ∑ x : BitVec n, (if b = x.getLsbD i.val then 1 else 0 : ENNReal) =
-         (Finset.univ.filter (fun x : BitVec n => x.getLsbD i.val = b)).card := by
-      rw [← Finset.sum_boole]
-      congr 1; ext x; simp [eq_comm]
-    rw [this]
-    conv_lhs =>
-      arg 1; arg 1; arg 1; ext x;
-    rw [card_bitVec_getLsb_eq n hnpos i]
-    norm_cast
-  simp only [Nat.cast_one]
-  rw [hsum]
-  have hn : n = (n - 1) + 1 := (Nat.succ_pred_eq_of_pos hnpos).symm
-  nth_rw 1 [hn]
-  rw [pow_succ]
-  rw [ENNReal.mul_inv]
-  · rw [mul_comm, ← mul_assoc, ENNReal.mul_inv_cancel]
-    · rw [one_mul]
-    · exact Ne.symm (NeZero.ne' (2 ^ (n - 1)))
-    · exact Ne.symm (not_eq_of_beq_eq_false rfl)
-  · left; exact Ne.symm (NeZero.ne' (2 ^ (n - 1)))
-  · right; exact Ne.symm (NeZero.ne' 2)
-
-/-- XORを用いた全単射。x と mask の XOR は自身の逆関数になる。 -/
-def xor_equiv {L : ℕ} (mask : BitVec L) : BitVec L ≃ BitVec L where
-  toFun x := x ^^^ mask
-  invFun x := x ^^^ mask
-  left_inv x := by simp [BitVec.xor_assoc, BitVec.xor_self]
-  right_inv x := by simp [BitVec.xor_assoc, BitVec.xor_self]
 
 /-- 長さが等しい BitVec 同士のキャスト同型 -/
 def castEquiv {n m : ℕ} (h : n = m) : BitVec n ≃ BitVec m where
@@ -205,115 +74,43 @@ def tripleEquiv {L : ℕ} (i : Fin L) :
     _ ≃ BitVec i.val × (BitVec 1 × BitVec (L - i.val - 1)) :=
             Equiv.prodCongr (Equiv.refl _) (bitvec_equiv 1 (L - i.val - 1))
 
-/-- tripleEquiv による抽出は、extractLsb' や getLsbD の条件と完全に一致する -/
+
 lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i.val) (b : Bool) :
     (pre = x.extractLsb' (L - i.val) i.val ∧ x.getLsbD (L - i.val - 1) = b) ↔
     ((tripleEquiv i x).1 = pre ∧ (tripleEquiv i x).2.1 = if b then 1 else 0) := by
-  -- ここは bitvec_equiv の toFun の定義を展開するだけで証明可能です
-  -- 1. 第1成分が extractLsb' に完全に一致することの証明
+
+  -- 1. 第1成分が extractLsb' に一致することの証明
   have h_part1 : (tripleEquiv i x).1 = x.extractLsb' (L - i.val) i.val := by
-    -- Equiv の合成を展開して計算を進める魔法のコマンド
     dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
-    -- あとは BitVec.eq_of_getLsbD_eq と simp で各ビットを比較すれば終わります
-    apply BitVec.eq_of_getLsbD_eq
-    intro j
+    apply BitVec.eq_of_getLsbD_eq; intro j
     simp only [BitVec.getLsbD_extractLsb']
     erw [BitVec.getLsbD_cast]
     · aesop
     · omega
 
-  -- 2. 第2成分が 1ビットの抽出に完全に一致することの証明
+  -- 2. 第2成分が 1ビットの抽出に一致することの証明
   have h_part2 : (tripleEquiv i x).2.1 = x.extractLsb' (L - i.val - 1) 1 := by
     dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
-    -- 同様に BitVec.eq_of_getLsbD_eq と simp [BitVec.getLsbD_extractLsb'] で終わります
-    apply BitVec.eq_of_getLsbD_eq
-    intro j
-    simp only [BitVec.getLsbD_extractLsb']
-    simp only [BitVec.getLsbD_cast]
-    simp only [Nat.lt_one_iff, BitVec.getLsbD_extractLsb', zero_add]
+    apply BitVec.eq_of_getLsbD_eq; intro j
+    simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_cast, Nat.lt_one_iff, zero_add]
     aesop
 
-  -- 3. 1ビットの BitVec の等式と、Bool の等式の同値性の証明
+  -- 3. Bool の等式と BitVec 1 の等式の同値性の証明
   have h_bool : (x.getLsbD (L - i.val - 1) = b) ↔ (x.extractLsb' (L - i.val - 1) 1 = if b then 1 else 0) := by
-    -- b が true か false かで場合分け (cases b) し、
-    -- BitVec.eq_of_getLsbD_eq でインデックス j=0 のみを比較すれば証明できます
-    cases b
-    · simp only [Bool.false_eq_true, ↓reduceIte, BitVec.ofNat_eq_ofNat]
-      constructor
-      · intro h
-        apply BitVec.eq_of_getLsbD_eq
-        intro j h_j
-        have hj : j = 0 := by omega
-        simp [hj, h]
-      · intro h
-        have h0 := congrArg (fun v => BitVec.getLsbD v 0) h
-        simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero,
-          BitVec.getElem_zero] at h0
-        exact h0
-    · simp only [↓reduceIte, BitVec.ofNat_eq_ofNat]
-      constructor
-      · intro h
-        apply BitVec.eq_of_getLsbD_eq
-        intro j h_j
-        have hj : j = 0 := by omega
-        simp [hj, h]
-      · intro h
-        have h0 := congrArg (fun v => BitVec.getLsbD v 0) h
-        simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero,
-          BitVec.getElem_one, decide_true] at h0
-        exact h0
-  -- 4. 組み上げ：用意した3つの事実で右辺を書き換える
+    constructor
+    · -- (→) の証明：b で場合分けし、両方のブランチを同時に simp で潰す
+      intro h
+      apply BitVec.eq_of_getLsbD_eq; intro j _
+      have hj : j = 0 := by omega
+      cases b <;> simp [hj, h]
+    · -- (←) の証明：congrArg で 0番目のビットを取り出し、両ブランチを同時に潰す
+      intro h
+      have h0 := congrArg (fun v => BitVec.getLsbD v 0) h
+      cases b <;> simp [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero] at h0 <;> exact h0
+
+  -- 4. 組み上げ
   rw [h_part1, h_part2, ← h_bool]
-  -- 残るゴールは (pre = X ∧ Y = b) ↔ (X = pre ∧ Y = b) になる
-  -- 左側の等式の左右が逆になっているだけなので、eq_comm で反転させて終了！
   exact and_congr eq_comm Iff.rfl
-
-
-lemma card_bitVec_pre_bit (L : ℕ) (i : Fin L) (pre : BitVec i.val) (b : Bool) :
-    (Finset.univ.filter (fun x : BitVec L =>
-      pre = x.extractLsb' (L - i.val) i.val ∧
-      x.getLsbD (L - i.val - 1) = b)).card = 2 ^ (L - i.val - 1) := by
-  -- 1. 目標のサイズを持つ基準の集合(univ)のサイズに書き換える
-  have h_target_card : (Finset.univ : Finset (BitVec (L - i.val - 1))).card = 2 ^ (L - i.val - 1) := by
-    simp [card_bitvec]
-  rw [← h_target_card]
-
-  let b_vec : BitVec 1 := if b then 1 else 0
-
-  -- 2. card_bij を使って「条件を満たす集合」と「下位ビットの集合」の全単射を構築する
-  symm
-  apply Finset.card_bij (fun s _ => (tripleEquiv i).symm (pre, b_vec, s))
-
-  · -- [Well-definedness] 抽出した要素が対象集合 (univ) に含まれるか（自明）
-    intro s _
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-    rw [tripleEquiv_apply]
-    simp [tripleEquiv]
-    exact ite_cond_congr rfl
-
-  · -- [Injectivity] 単射性: 下位ビットが等しいなら元の x も等しいことの証明
-    intro s1 _ s2 _ h_eq
-    have h_prod_eq : (pre, b_vec, s1) = (pre, b_vec, s2) := (tripleEquiv i).symm.injective h_eq
-    injection h_prod_eq with _ h_rest
-    injection h_rest with _ h_s
-
-  · -- [Surjectivity] 全射性: 任意の下位ビット s に対し、条件を満たす x が存在することの証明
-    intro x hx
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hx
-    rw [tripleEquiv_apply] at hx
-
-    let s := (tripleEquiv i x).2.2
-    use s
-    refine ⟨Finset.mem_univ _, ?_⟩
-
-    have h_reconstruct : (pre, b_vec, s) = tripleEquiv i x := by
-      apply Prod.ext
-      · exact hx.1.symm
-      · apply Prod.ext
-        · aesop
-        · rfl
-    rw [h_reconstruct]
-    exact (tripleEquiv i).symm_apply_apply x
 
 
 lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
