@@ -90,58 +90,102 @@ lemma G_prime_step_eq_F_step (s : BitVec n) (k : ℕ) :
   unfold G' G_ext F_step
   simp only [split_next]
 
+
+private lemma U_1_n_split {n : ℕ} :
+    U (n + 1) = (do
+      let b ← U 1
+      let seed ← U n
+      PMF.pure ((b ++ seed).cast (by omega))) := by
+  calc
+    U (n + 1)
+      = (fun x => x.cast (by omega)) <$> U (1 + n) := by
+        change U (n + 1) = PMF.map (bitvec_add_comm_equiv n) (U (1 + n))
+        exact (uniformOfFintype_map_equiv (bitvec_add_comm_equiv n)).symm
+    _ = (fun x => x.cast (by omega)) <$> (do
+          let b ← U 1
+          let seed ← U n
+          PMF.pure (b ++ seed)) := by
+        rw [U_add_dist 1 n]
+        rfl
+    _ = (do
+          let b ← U 1
+          let seed ← U n
+          PMF.pure ((b ++ seed).cast (by omega))) := by
+        simp only [Functor.map, Function.comp_def, Bind.bind]
+        simp only [bind_bind, PMF.pure_bind]
+
 /-- `Hybrid i` equals the distribution obtained by sampling a uniform prefix
     and then applying `F_step` to a fresh uniform `(n+1)`-bit value. -/
 lemma step_equiv_random (hi : i < L) :
-    Hybrid G L i = do
+    Hybrid G L i = (do
         let pre ← U (L - (i + 1))
         let v   ← U (n + 1)
-        return (pre ++ F_step G (i + 1) v).cast (by omega) := by
-  unfold Hybrid
-  simp only [show i ≤ L from by omega, ↓reduceDIte]
-  rw [h_split_U i L hi]
-  simp_rw [bind_assoc]
-  apply PMF.ext; intro x
-  erw [PMF.bind_apply, PMF.bind_apply]
-  simp_rw [tsum_fintype]
-  apply Finset.sum_congr rfl
-  intro a _
-  congr 1
-  apply congr_fun _ x
-  simp only [LawfulMonad.bind_pure_comp, LawfulMonad.pure_bind, DFunLike.coe_fn_eq]
-  erw [← LawfulMonad.bind_pure_comp]
-  simp_rw [← LawfulMonad.bind_pure_comp]
-  apply PMF.ext;
-  intro y
-  erw [PMF.bind_apply, tsum_fintype]
-  erw [PMF.bind_apply, tsum_fintype]
-  -- Decompose the sum over BitVec (n+1) into a double sum over BitVec 1 and BitVec n.
-  rw [show (∑ a_1 : BitVec (n+1), _) = ∑ x : BitVec 1, ∑ a_1 : BitVec n, _
-      from sum_bitvec_n_plus_one n]
-  apply Finset.sum_congr rfl
-  intro b _
-  erw [PMF.bind_apply, tsum_fintype]
-  simp only [show (Pure.pure : BitVec L → PMF (BitVec L)) = PMF.pure from rfl]
-  simp only [PMF.pure_apply]
-  rw [Finset.mul_sum]
-  apply Finset.sum_congr rfl
-  intro x _
-  -- Merge U 1 and U n into U (n+1) using the product formula.
-  have hU : (U 1) b * (U n) x = (U (n+1)) (BitVec.cast (by omega) (b ++ x)) := by
-    simp [U, PMF.uniformOfFintype_apply, card_bitvec, pow_add, mul_comm]
-    rw [ENNReal.mul_inv]
-    · left; norm_num
-    · left; norm_num
-  rw [← mul_assoc, hU]
-  congr 1
-  simp [F_step, split_next_append]
-  congr 1
-  congr 1
-  -- Reduce to a Nat bitwise identity: (a <<< 1 ||| b) <<< i = a <<< (i+1) ||| b <<< i.
-  apply BitVec.eq_of_toNat_eq
-  simp [BitVec.toNat_cast, BitVec.toNat_append, G']
-  rw [Nat.shiftLeft_succ, Nat.shiftLeft_or_distrib, Nat.or_assoc]
-  congr 1
+        return (pre ++ F_step G (i + 1) v).cast (by omega)) := by
+  calc
+    Hybrid G L i
+      = (do
+          let u_pre ← U (L - i)
+          let seed ← U n
+          PMF.pure ((u_pre ++ G' G i seed).cast (by omega))) := by
+        unfold Hybrid
+        simp only [show i ≤ L from by omega, ↓reduceDIte]; rfl
+    -- Step 1: use h_split_U to split u_pre into pre and b
+    _ = (do
+          let u_pre ← (do
+            let pre ← U (L - (i + 1))
+            let b ← U 1
+            PMF.pure (((pre ++ b).cast (by omega) : BitVec (L - i))))
+          let seed ← U n
+          PMF.pure ((u_pre ++ G' G i seed).cast (by omega))) := by
+        congr 1
+        exact h_split_U i L hi
+    -- Step 2: Flatten the nest
+    _ = (do
+          let pre ← U (L - (i + 1))
+          let b ← U 1
+          let seed ← U n
+          PMF.pure ((((pre ++ b).cast (by omega) : BitVec (L - i)) ++ G' G i seed).cast (by omega))) := by
+        simp only [bind_assoc]; simp only [Bind.bind]; simp only [PMF.pure_bind]
+    -- Step 3: Rearrange the contents inside pure (bit string concatenation order) (apply separated lemma)
+    _ = (do
+          let pre ← U (L - (i + 1))
+          let b ← U 1
+          let seed ← U n
+          PMF.pure ((pre ++ F_step G (i + 1) ((b ++ seed).cast (by omega))).cast (by omega)))
+        := by
+          simp [F_step, split_next_append]
+          unfold G';
+          congr; funext pre
+          congr; funext b
+          congr; funext seed
+          congr 1;
+          apply BitVec.eq_of_toNat_eq
+          simp only [BitVec.toNat_cast, BitVec.toNat_append]
+          simp only [Nat.shiftLeft_or_distrib]
+          simp only [Nat.shiftLeft_add, Nat.or_assoc]
+          simp only [Nat.shiftLeft_eq_mul_pow]
+          ring_nf
+    -- Step 4: Refold the sampling of b and seed into a single do block (Refold)
+    _ = (do
+          let pre ← U (L - (i + 1))
+          let v ← (do
+            let b ← U 1
+            let seed ← U n
+            PMF.pure ((b ++ seed).cast (by omega)))
+          PMF.pure ((pre ++ F_step G (i + 1) v).cast (by omega))) := by
+          congr ; funext pre;
+          simp only [bind_assoc]
+          congr ; funext b; congr ; funext seed;
+          simp only [Bind.bind, PMF.pure_bind]
+    -- Step 5: Replace the factored-out part with U (n+1)
+    _ = (do
+          let pre ← U (L - (i + 1))
+          let v ← U (n + 1)
+          PMF.pure ((pre ++ F_step G (i + 1) v).cast (by omega)))
+        := by
+          congr; funext pre
+          congr 1
+          exact U_1_n_split.symm
 
 /-- `Hybrid (i+1)` equals the distribution obtained by sampling a uniform prefix
     and then applying `F_step` to the output of the PRG `G`. -/
