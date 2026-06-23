@@ -91,6 +91,8 @@ lemma G_prime_step_eq_F_step (s : BitVec n) (k : ℕ) :
   simp only [split_next]
 
 
+/-- Splits a uniform random bitvector of length `n + 1` into a uniform
+    1-bit prefix and a uniform `n`-bit suffix, then recombines them. -/
 private lemma U_1_n_split {n : ℕ} :
     U (n + 1) = (do
       let b ← U 1
@@ -155,10 +157,7 @@ lemma step_equiv_random (hi : i < L) :
         := by
           simp [F_step, split_next_append]
           unfold G';
-          congr; funext pre
-          congr; funext b
-          congr; funext seed
-          congr 1;
+          congr; funext pre; congr; funext b; congr; funext seed; congr 1;
           apply BitVec.eq_of_toNat_eq
           simp only [BitVec.toNat_cast, BitVec.toNat_append]
           simp only [Nat.shiftLeft_or_distrib]
@@ -179,10 +178,9 @@ lemma step_equiv_random (hi : i < L) :
           simp only [Bind.bind, PMF.pure_bind]
     -- Step 5: Replace the factored-out part with U (n+1)
     _ = (do
-          let pre ← U (L - (i + 1))
-          let v ← U (n + 1)
-          PMF.pure ((pre ++ F_step G (i + 1) v).cast (by omega)))
-        := by
+            let pre ← U (L - (i + 1))
+            let v ← U (n + 1)
+            PMF.pure ((pre ++ F_step G (i + 1) v).cast (by omega))) := by
           congr; funext pre
           congr 1
           exact U_1_n_split.symm
