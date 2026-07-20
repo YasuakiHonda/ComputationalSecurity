@@ -1,4 +1,5 @@
 import ComputationalSecurity.DistInd
+import ComputationalSecurity.BVCryptGameLib
 import ComputationalSecurity.PRGDefs
 import Mathlib.Data.Nat.Size
 import Mathlib.Data.Nat.Bitwise
@@ -6,6 +7,7 @@ import Mathlib.Data.Nat.Bitwise
 namespace ComputationalSecurity
 
 open PMF
+open BVCryptGame
 
 /-!
 # Theorem 4.1: PRG Sequential Extension

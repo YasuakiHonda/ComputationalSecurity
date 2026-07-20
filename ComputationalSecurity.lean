@@ -1,3 +1,4 @@
+import ComputationalSecurity.BVCryptGameLib
 import ComputationalSecurity.ProbabilityUtils
 import ComputationalSecurity.GuessingLemma
 import ComputationalSecurity.Defs
@@ -7,4 +8,5 @@ import ComputationalSecurity.SemSec_Implies_Ind
 import ComputationalSecurity.Ind_Implies_SemSec
 import ComputationalSecurity.ShortKey_CompSec
 import ComputationalSecurity.PRG_Sequential_Extension
-import ComputationalSecurity.NextBit_Unpredictable
+import ComputationalSecurity.PRG_impl_NB_Unpred
+import ComputationalSecurity.NB_Unpred_impl_PRG

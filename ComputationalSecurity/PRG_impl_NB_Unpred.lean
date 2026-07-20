@@ -35,6 +35,7 @@ import Mathlib.Data.Nat.Bitwise
 namespace ComputationalSecurity
 
 open PMF
+open BVCryptGame
 
 /-- A helper definition for the probability that algorithm A successfully predicts
     the (i+1)-th bit given the first i bits of a distribution X. -/
@@ -94,61 +95,6 @@ def castEquiv {n m : ℕ} (h : n = m) : BitVec n ≃ BitVec m where
   left_inv x := by simp
   right_inv x := by simp
 
-/-- Equivalence splitting a `BitVec L` into three independent parts:
-    the upper `i` bits (prefix), one middle bit, and the lower `L-i-1` bits (suffix).
-    This is the key structural decomposition underlying `U_map_pre_bit`. -/
-def tripleEquiv {L : ℕ} (i : Fin L) :
-    BitVec L ≃ BitVec i × BitVec 1 × BitVec (L - i - 1) :=
-  calc BitVec L
-    _ ≃ BitVec (i + (L - i)) := castEquiv (by omega)
-    _ ≃ BitVec i × BitVec (L - i) := bitvec_equiv i (L - i)
-    _ ≃ BitVec i × BitVec (1 + (L - i - 1)) :=
-            Equiv.prodCongr (Equiv.refl _) (castEquiv (by omega))
-    _ ≃ BitVec i × (BitVec 1 × BitVec (L - i - 1)) :=
-            Equiv.prodCongr (Equiv.refl _) (bitvec_equiv 1 (L - i - 1))
-
-
-/-- Characterizes `tripleEquiv` component-wise:
-    the first component equals `extractLsb'` (the upper `i` bits),
-    and the second component equals the single-bit encoding of `getLsbD`. -/
-lemma tripleEquiv_apply {L : ℕ} (i : Fin L) (x : BitVec L) (pre : BitVec i) (b : Bool) :
-    (pre = x.extractLsb' (L - i) i ∧ x.getLsbD (L - i - 1) = b) ↔
-    ((tripleEquiv i x).1 = pre ∧ (tripleEquiv i x).2.1 = if b then 1 else 0) := by
-
-  -- 1. The first component matches extractLsb'.
-  have h_part1 : (tripleEquiv i x).1 = x.extractLsb' (L - i) i := by
-    dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
-    apply BitVec.eq_of_getLsbD_eq; intro j
-    simp only [BitVec.getLsbD_extractLsb']
-    erw [BitVec.getLsbD_cast]
-    · aesop
-    · omega
-
-  -- 2. The second component matches the 1-bit extraction.
-  have h_part2 : (tripleEquiv i x).2.1 = x.extractLsb' (L - i - 1) 1 := by
-    dsimp [tripleEquiv, Equiv.trans, bitvec_equiv, castEquiv, Equiv.prodCongr]
-    apply BitVec.eq_of_getLsbD_eq; intro j
-    simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_cast, Nat.lt_one_iff, zero_add]
-    aesop
-
-  -- 3. Equivalence between the Bool equality and the BitVec 1 equality.
-  have h_bool : (x.getLsbD (L - i - 1) = b) ↔ (x.extractLsb' (L - i - 1) 1 = if b then 1 else 0) := by
-    constructor
-    · -- (→) の証明：b で場合分けし、両方のブランチを同時に simp で潰す
-      intro h
-      apply BitVec.eq_of_getLsbD_eq; intro j _
-      have hj : j = 0 := by omega
-      cases b <;> simp [hj, h]
-    · -- (←) の証明：congrArg で 0番目のビットを取り出し、両ブランチを同時に潰す
-      intro h
-      have h0 := congrArg (fun v => BitVec.getLsbD v 0) h
-      cases b <;> simp [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero]
-                        at h0 <;> exact h0
-
-  -- 4. Combine the three facts.
-  rw [h_part1, h_part2, ← h_bool]
-  exact and_congr eq_comm Iff.rfl
-
 
 /-- Mapping a uniform `L`-bit sample to `(prefix, bit)` equals independent sampling:
     the upper `i` bits are uniform over `BitVec i`, and the selected bit is a uniform
@@ -163,69 +109,46 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
     ) := by
   calc
     (U L).map (fun x => (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
-    -- Step 1: Rewrite .map as a do-expression.
-    _ = (do
-          let x ← U L
-          PMF.pure (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
-        := by rfl  -- PMF.map unfolds to bind/pure by definition.
-    -- Step 1.5: Rewrite the projection functions via tripleEquiv (U L is still one sample).
-    _ = (do
-          let x ← U L
-          let pre := (tripleEquiv i x).1
-          let b_vec := (tripleEquiv i x).2.1
-          let rest := (tripleEquiv i x).2.2
-          PMF.pure (pre, b_vec.getLsbD 0))
-        := by congr 1; funext x; congr 1
-              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, Prod.mk.injEq]
-              have h := (tripleEquiv_apply i x (x.extractLsb' (L - i) i)
-                        (x.getLsbD (L - i - 1))).mp ⟨rfl, rfl⟩
-              -- h : (tripleEquiv i x).1 = x.extractLsb' (L-i) i
-              --   ∧ (tripleEquiv i x).2.1 = if x.getLsbD (L-i-1) then 1 else 0
-              obtain ⟨h1, h2⟩ := h
-              constructor
-              · exact h1.symm
-              · rw [h2]
-                cases x.getLsbD (L - i - 1) <;> rfl
-    -- Step 2: Replace the single U L sample with three independent samples
-    --          using the equivalence tripleEquiv and uniformOfFintype_eq_bind3_of_equiv.
+    -- Step 1: 生のビット演算を、ライブラリの同型(bv_split3_i)の射影に貼り替える
+    _ = (U L).map (fun x =>
+          let triple := bv_split3_i i x
+          (triple.1, triple.2.1.getLsbD 0)) := by
+        congr; funext x
+        simp only [bv_split3_i_proj_pre, bv_split3_i_proj_bool]
+    -- Step 2: U L を U_split3_i でバラし、map を do 文の奥底(pure)へ押し込む
     _ = (do
           let pre ← U i
-          let b_vec ← U 1
-          let rest ← U (L - i - 1)
-          PMF.pure (pre, b_vec.getLsbD 0))
-        := by unfold U
-              rw [uniformOfFintype_eq_bind3_of_equiv (tripleEquiv i)]
-              simp only [Equiv.invFun_as_coe, Bind.bind]
-              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, bind_bind, PMF.pure_bind,
-                Equiv.apply_symm_apply, bind_const]
-              congr; funext a; congr; funext b;
-              change PMF.map (Function.const _ (a, b[0])) (PMF.uniformOfFintype _)
-                      = PMF.pure (a, b[0])
-              exact PMF.map_const (uniformOfFintype (BitVec (L - ↑i - 1))) (a, b[0])
-    -- Step 3: Drop the unused `rest` sample.
+          let bit ← U 1
+          let suf ← U (L - i - 1)
+          let triple := bv_split3_i i (bv_join3_i i (pre, bit, suf))
+          PMF.pure (triple.1, triple.2.1.getLsbD 0)) := by
+        rw [U_split3_i i]
+        -- map_bind と pure_map で、外側の map を一気に pure の中へ
+        simp only [map_bind_do, map_pure_do]
+    -- Step 3: 同型の「行って戻る」性質 (apply_symm_apply) で式を簡約
     _ = (do
           let pre ← U i
-          let b_vec ← U 1
-          PMF.pure (pre, b_vec.getLsbD 0))
-        := by congr 1; ext pre
-              congr 1; ext b_vec
-              congr ; ext b; congr ;
-              -- PMF.bind_const: (do let _ ← p; q) = q
-              exact PMF.bind_const (U (L - i - 1)) (PMF.pure (pre, b.getLsbD 0))
-    -- Step 4: Convert U 1 to the uniform distribution over Bool via boolEquiv.
+          let bit ← U 1
+          let suf ← U (L - i - 1)
+          PMF.pure (pre, bit.getLsbD 0)) := by
+        simp only [bv_join3_i, Equiv.apply_symm_apply]
+    -- Step 4: 使っていないサフィックス (suf) を削除
+    _ = (do
+          let pre ← U i
+          let bit ← U 1
+          PMF.pure (pre, bit.getLsbD 0)) := by
+        simp only [bind_unused]
+    -- Step 5: BitVec 1 からのサンプリングを Bool のサンプリングへ変換
     _ = (do
           let pre ← U i
           let b ← PMF.uniformOfFintype Bool
-          PMF.pure (pre, b))
-        := by congr 1; funext pre
-              rw [U1_eq_map_boolEquiv]
-              simp only [Bind.bind]
-              simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, PMF.bind_map]
-              congr; funext b
-              simp only [Function.comp_apply]
-              congr
-              cases b <;> rfl
-
+          PMF.pure (pre, b)) := by
+        -- U 1 を map bv_to_bool (U_Bool) に戻して整理
+        congr 1; funext pre
+        rw [← U1_to_bool];
+        simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, bind_map_do]
+        simp only [bv_to_bool]
+        simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.ofNat_eq_ofNat, Equiv.coe_fn_mk]
 
 /-- For any distribution `AnyDist` over `Bool`, guessing against an independent
     uniform coin flip succeeds with probability exactly 1/2. -/

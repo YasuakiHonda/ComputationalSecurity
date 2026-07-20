@@ -36,9 +36,12 @@ import Mathlib.Probability.ProbabilityMassFunction.Monad
 import Mathlib.Probability.ProbabilityMassFunction.Constructions
 import Mathlib.Probability.Distributions.Uniform
 import Mathlib.Data.BitVec
+import ComputationalSecurity.BVCryptGameLib
 
-/-- Bit is defined as Fin 2, consistent with textbook notation. -/
-abbrev Bit := Fin 2
+open BVCryptGame
+
+export BVCryptGame (Bit)
+-- abbrev Bit := Fin 2
 
 open BigOperators
 
@@ -48,10 +51,8 @@ theorem tsum_bit {f : Bit → ENNReal} : (∑' (b : Bit), f b) = f 0 + f 1 := by
   rw [tsum_fintype]
   rw [Fin.sum_univ_two]
 
-/-- `randomBit` is a PMF that outputs 0 or 1 with equal probability. -/
-noncomputable
-abbrev randomBit : PMF Bit :=
-  PMF.uniformOfFintype Bit
+
+export BVCryptGame (randomBit)
 
 /-- The probability that `randomBit` outputs either 0 or 1 is 1/2. -/
 theorem randomBit_apply (b : Bit) : randomBit b = 1/2 := by
@@ -62,23 +63,14 @@ theorem randomBit_apply (b : Bit) : randomBit b = 1/2 := by
 -- Pr and related lemmas
 -- ============================================================
 
-/-- Pr: the probability that a PMF Bool outputs true. -/
-noncomputable def Pr (p : PMF Bool) : ENNReal := p true
+export BVCryptGame (Pr)
+-- notation "Pr" => BVCryptGame.Pr
+-- noncomputable def Pr := BVCryptGame.Pr
+--attribute [simp] BVCryptGame.Pr
 
-/-- Pr distributes over bind as an expected value. -/
-lemma Pr_bind (p : PMF α) (f : α → PMF Bool) :
-    Pr (p.bind f) = ∑' a, p a * Pr (f a) := by
-  simp [Pr, PMF.bind_apply]
+export BVCryptGame (Pr_bind)
 
-/-- Pr of a PMF equals 1 minus the probability of the complemented PMF. -/
-lemma Pr_compl (p : PMF Bool) :
-    Pr p = 1 - (p.bind (fun b => PMF.pure (!b))) true := by
-  have h := p.tsum_coe
-  rw [tsum_bool, add_comm] at h
-  simp only [Pr, PMF.bind_apply, PMF.pure_apply,
-             tsum_bool, Bool.not_true, Bool.not_false, ↓reduceIte]
-  apply ENNReal.eq_sub_of_add_eq' (by norm_num)
-  simp only [mul_one, Bool.true_eq_false, ↓reduceIte, mul_zero, add_zero, h]
+export BVCryptGame (Pr_compl)
 
 -- ============================================================
 -- Boundedness lemmas for PMF expected values
@@ -135,43 +127,57 @@ lemma formula1 (A B : ENNReal)
 -- BitVec Fintype instance and uniform distribution
 -- ============================================================
 
-/-- `BitVec n` is a finite type with `2^n` elements. -/
-instance (n : ℕ) : Fintype (BitVec n) :=
-  Fintype.ofEquiv (Fin (2^n)) {
-    toFun := BitVec.ofFin
-    invFun := BitVec.toFin
-    left_inv := fun _ => rfl
-    right_inv := fun x => by cases x; rfl
-  }
-
 namespace ComputationalSecurity
 
 open PMF
 
-/-- The uniform distribution over `{0,1}^n`. -/
-noncomputable def U (n : ℕ) : PMF (BitVec n) :=
-  PMF.uniformOfFintype (BitVec n)
+export BVCryptGame (U)
 
 -- ============================================================
 -- BitVec combinatorial lemmas
 -- ============================================================
 
+
+export BVCryptGame (card_bitvec)
+
+def bitVecProdEquiv (n m : Nat) : BitVec (n + m) ≃ (BitVec n) × (BitVec m) := by
+  apply Equiv.symm
+  refine (Equiv.prodCongr BitVec.equivFin.toEquiv BitVec.equivFin.toEquiv).trans ?_
+  refine finProdFinEquiv.trans ?_
+  have h_pow : 2^n * 2^m = 2^(n + m) := by ring
+  rw [h_pow]
+  exact BitVec.equivFin.toEquiv.symm
+
+-- 左辺を Nonempty (BitVec n ≃ BitVec m) に変更する
+theorem bitVec_equiv_iff_eq (n m : ℕ) : Nonempty (BitVec n ≃ BitVec m) ↔ n = m := by
+  constructor
+  · -- ケース 1: ≃ → =
+    -- h の型は「同型写像が存在する」という命題になる
+    intro h
+    -- Nonempty から中身（同型写像そのもの）を取り出す
+    rcases h with ⟨equiv_inst⟩
+    have h_card := Fintype.card_congr equiv_inst
+    rw [card_bitvec n, card_bitvec m] at h_card
+    exact Nat.pow_right_injective (by norm_num) h_card
+  · -- ケース 2: = → ≃
+    intro h
+    rw [h]
+    -- 命題の世界なので、Nonempty.intro を使って「存在する」ことを示す
+    exact Nonempty.intro (Equiv.refl _)
+
+
 /-- Equivalence between `BitVec (n+m)` and `BitVec n × BitVec m` via split/concat. -/
 def bitvec_equiv (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m :=
   { toFun    := fun v => (v.extractLsb' m n, v.extractLsb' 0 m)
     invFun   := fun p => p.1 ++ p.2
-    left_inv := fun v => by apply BitVec.eq_of_toNat_eq; simp
+    left_inv := fun v => by apply BitVec.eq_of_toNat_eq
+                            simp only [BitVec.extractLsb'_append_extractLsb']
     right_inv := fun p => by
       ext1
       · simp [BitVec.extractLsb'_append_eq_left]
       · simp [BitVec.extractLsb'_append_eq_right] }
 
-/-- The cardinality of `BitVec n` is `2^n`. -/
-lemma card_bitvec (n : ℕ) : Fintype.card (BitVec n) = 2^n := by
-  have : Fintype.card (BitVec n) = Fintype.card (Fin (2^n)) :=
-    Fintype.card_congr ⟨BitVec.toFin, BitVec.ofFin,
-      fun x => by cases x; rfl, fun _ => rfl⟩
-  simp [this]
+
 
 /-- The sum over `b2 : BitVec m` of `if b1 ++ b2 = c then 1 else 0`
     equals 1 iff `b1` matches the high bits of `c`, else 0. -/
@@ -194,28 +200,8 @@ lemma tsum_append_eq (n m : ℕ) (c : BitVec (n + m)) (b1 : BitVec n) :
     have := congr_arg (BitVec.extractLsb' m n) heq
     simp [BitVec.extractLsb'_append_eq_left] at this; exact this
 
-/-- Sampling `n+m` uniform bits equals sampling `n` bits then `m` bits and concatenating. -/
-lemma U_add_dist (n m : ℕ) :
-    U (n + m) = (do let b1 ← U n; let b2 ← U m; return b1 ++ b2) := by
-  change U (n + m) = (U n).bind (fun b1 => (U m).map (fun b2 => b1 ++ b2))
-  apply PMF.ext; intro c
-  simp only [U, PMF.uniformOfFintype_apply, PMF.bind_apply, PMF.map_apply, card_bitvec]
-  simp_rw [ENNReal.tsum_mul_left]
-  simp only [Nat.cast_pow, Nat.cast_ofNat, tsum_fintype]
-  rw [Finset.sum_eq_single (c.extractLsb' m n)]
-  · rw [Finset.sum_eq_single (c.extractLsb' 0 m)]
-    · simp only [BitVec.extractLsb'_append_extractLsb', ↓reduceIte]
-      rw [pow_add]
-      apply ENNReal.mul_inv
-        (Or.inl (ENNReal.pow_ne_zero (by norm_num) n))
-        (Or.inr (ENNReal.pow_ne_zero (by norm_num) m))
-    · intro b2 _ hne; rw [if_neg]; intro heq; apply hne
-      have := congr_arg (BitVec.extractLsb' 0 m) heq
-      simp [BitVec.extractLsb'_append_eq_right] at this; exact this.symm
-    · intro h; exact absurd (Finset.mem_univ _) h
-  · intro b1 _ hne; simp; intro i; by_contra
-    rw [this] at hne; exact hne BitVec.extractLsb'_append_eq_left.symm
-  · intro h; exact absurd (Finset.mem_univ _) h
+/- Sampling `n+m` uniform bits equals sampling `n` bits then `m` bits and concatenating. -/
+export BVCryptGame(U_add_dist)
 
 /-- A sum over `BitVec (n+m)` equals the double sum over `BitVec n` and `BitVec m`. -/
 lemma sum_bitvec_split (n m : ℕ) {f : BitVec (n + m) → ENNReal} :
@@ -225,12 +211,9 @@ lemma sum_bitvec_split (n m : ℕ) {f : BitVec (n + m) → ENNReal} :
     Fintype.sum_equiv (bitvec_equiv n m) _ _ (fun v => by simp [bitvec_equiv])
   rw [key, Fintype.sum_prod_type]
 
-/-- Equivalence swapping the summation order for `BitVec (1+n)` and `BitVec (n+1)`. -/
-def bitvec_add_comm_equiv (n : ℕ) : BitVec (1 + n) ≃ BitVec (n + 1) :=
-  { toFun   := fun v => v.cast (by omega)
-    invFun  := fun v => v.cast (by omega)
-    left_inv  := fun v => by simp
-    right_inv := fun v => by simp }
+/- Equivalence swapping the summation order for `BitVec (1+n)` and `BitVec (n+1)`. -/
+export BVCryptGame (bitvec_add_comm_equiv)
+export BVCryptGame (bv_one_add_comm_equiv)
 
 /-- A sum over `BitVec (n+1)` equals the double sum over `BitVec 1` and `BitVec n`. -/
 lemma sum_bitvec_n_plus_one (n : ℕ) {f : BitVec (n + 1) → ENNReal} :
@@ -240,80 +223,26 @@ lemma sum_bitvec_n_plus_one (n : ℕ) {f : BitVec (n + 1) → ENNReal} :
       = ∑ v : BitVec (1 + n), f (v.cast (by omega)) := by
           apply Fintype.sum_equiv (bitvec_add_comm_equiv n).symm
           intro v; simp [bitvec_add_comm_equiv]
+          congr
     _ = ∑ b1 : BitVec 1, ∑ b2 : BitVec n, f ((b1 ++ b2).cast (by omega)) :=
           sum_bitvec_split 1 n
 
-/-- Splitting U (L-i) into a `(L-i-1)`-bit prefix and a 1-bit suffix. -/
-lemma h_split_U (i L : Nat) (hL : i < L) : U (L - i) = do
-      let pre ← U (L - (i + 1))
-      let b   ← U 1
-      return (pre ++ b).cast (by omega) := by
-  let P := L - (i + 1)
-  have h_len : L - i = P + 1 := by omega
-  apply PMF.ext; intro x
-  simp only [U, PMF.uniformOfFintype_apply, card_bitvec, Nat.cast_pow, Nat.cast_ofNat]
-  simp only [Bind.bind, Pure.pure, PMF.bind_apply, PMF.pure_apply, tsum_fintype]
-  simp only [U, PMF.uniformOfFintype_apply, card_bitvec]
-  simp_rw [← Finset.mul_sum, ← mul_assoc]
-  rw [← ENNReal.mul_inv]
-  · norm_cast
-    -- Combine the two powers: 2^(L-i-1) * 2^1 = 2^(L-i).
-    have : 2 ^ (L - (i + 1)) * 2 ^ 1 = 2^(L-i) := by aesop
-    rw [this]
-    have (a b : ENNReal) (hnez : a ≠ 0) (hnet : a ≠ ⊤) : a = a * b ↔ b = 1 := by
-      constructor
-      · intro h; exact (ENNReal.mul_eq_left hnez hnet).mp (id (Eq.symm h))
-      · intro h; rw [h, mul_one]
-    rw [this]
-    · -- Show the double sum over (pre, b) equals 1 for any fixed x.
-      simp only [Nat.cast_ite, Nat.cast_one, Nat.cast_zero]
-      -- Cast x to BitVec (P+1) so that extractLsb' applies cleanly.
-      set x' := x.cast h_len with hx'
-      rw [show x = x'.cast h_len.symm from by norm_cast]
-      rw [Finset.sum_eq_single (x.extractLsb' 1 P)]
-      · rw [Finset.sum_eq_single (x.extractLsb' 0 1)]
-        · rw [if_pos]
-          exact congrArg (BitVec.cast (by omega)) BitVec.extractLsb'_append_extractLsb' |>.symm
-        · intro b _ hne; simp; intro heq; apply hne
-          have := congr_arg (BitVec.extractLsb' 0 1) heq
-          erw [BitVec.extractLsb'_append_eq_right] at this; exact this.symm
-        · intro h; exact absurd (Finset.mem_univ _) h
-      · intro b _ hne
-        apply Finset.sum_eq_zero; intro b2 _; simp; intro heq; apply hne
-        have := congr_arg (BitVec.extractLsb' 1 P) heq
-        erw [BitVec.extractLsb'_append_eq_left] at this; exact this.symm
-      · intro h; exact absurd (Finset.mem_univ _) h
-    · rw [ENNReal.inv_ne_zero]; exact ENNReal.natCast_ne_top (2 ^ (L - i))
-    · rw [ENNReal.inv_ne_top]; norm_cast; exact NeZero.ne (2 ^ (L - i))
-  · right; norm_num
-  · right; norm_num
+/- Splitting U (L-i) into a `(L-i-1)`-bit prefix and a 1-bit suffix. -/
+export BVCryptGame(h_split_U)
 
-/-- The uniform distribution over `α` is preserved under any equivalence `e : α ≃ β`:
+/- The uniform distribution over `α` is preserved under any equivalence `e : α ≃ β`:
     mapping by `e` yields the uniform distribution over `β`. -/
-lemma uniformOfFintype_map_equiv {α β : Type*}
-    [Fintype α] [Nonempty α] [Fintype β] [Nonempty β]
-    (e : α ≃ β) :
-    (PMF.uniformOfFintype α).map e = PMF.uniformOfFintype β := by
-  apply PMF.ext
-  intro b
-  simp only [map_apply, uniformOfFintype_apply]
-  rw [Fintype.card_congr e.symm]
-  rw [tsum_eq_single (e.symm b)]
-  · simp only [Equiv.apply_symm_apply, ↓reduceIte]
-  · intro c hc
-    have : b ≠ e c := by
-      by_contra;
-      rw [this] at hc
-      simp at hc
-    simp only [this, ↓reduceIte]
+export BVCryptGame (uniformOfFintype_map_equiv)
 
-/-- Equivalence between `Bool` and `BitVec 1` via the least-significant bit:
+/- Equivalence between `Bool` and `BitVec 1` via the least-significant bit:
     `true` maps to `1#1` and `false` maps to `0#1`. -/
-def boolEquiv : Bool ≃ BitVec 1 where
-  toFun b := if b then 1 else 0
-  invFun v := v.getLsbD 0
-  left_inv := by intro b; cases b <;> rfl
-  right_inv := by intro v; ext i hi; interval_cases i; simp; aesop
+abbrev boolEquiv := bv_to_bool.symm
+
+/-- `boolEquiv` applied to the bit extracted via `getLsbD 0` recovers the original `BitVec 1`.
+Bridges the definitional equality between `boolEquiv.symm` and `BitVec.getLsbD 0` into a
+syntactically usable simp lemma. -/
+@[simp] theorem boolEquiv_apply_getLsbD (v : BitVec 1) :
+    bv_to_bool.symm (v.getLsbD 0) = v := Equiv.apply_symm_apply bv_to_bool.symm v
 
 /-- The uniform distribution `U 1` over `BitVec 1` equals the uniform distribution
     over `Bool` mapped through `boolEquiv`. -/
@@ -321,6 +250,10 @@ lemma U1_eq_map_boolEquiv :
     U 1 = (PMF.uniformOfFintype Bool).map boolEquiv := by
   unfold U
   rw [@uniformOfFintype_map_equiv]
+
+
+/- U 1 から 1bit 取り出す操作は、一様な Bool 分布からのサンプリングと等しい -/
+export BVCryptGame(U1_getLsbD_eq_uniformBool)
 
 /-- The uniform distribution over a product type `α × β` equals independent sampling:
     first draw `a` uniformly from `α`, then draw `b` uniformly from `β`.

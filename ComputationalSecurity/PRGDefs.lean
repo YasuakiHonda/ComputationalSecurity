@@ -11,6 +11,7 @@ import ComputationalSecurity.DistInd
 namespace ComputationalSecurity
 
 open PMF
+open BVCryptGame
 
 /-- Definition 4.3: Pseudorandom Distribution.
     A distribution X over {0,1}^n is (t, ε)-pseudorandom if
