@@ -148,21 +148,15 @@ def bitVecProdEquiv (n m : Nat) : BitVec (n + m) ≃ (BitVec n) × (BitVec m) :=
   rw [h_pow]
   exact BitVec.equivFin.toEquiv.symm
 
--- 左辺を Nonempty (BitVec n ≃ BitVec m) に変更する
 theorem bitVec_equiv_iff_eq (n m : ℕ) : Nonempty (BitVec n ≃ BitVec m) ↔ n = m := by
   constructor
-  · -- ケース 1: ≃ → =
-    -- h の型は「同型写像が存在する」という命題になる
-    intro h
-    -- Nonempty から中身（同型写像そのもの）を取り出す
+  · intro h
     rcases h with ⟨equiv_inst⟩
     have h_card := Fintype.card_congr equiv_inst
     rw [card_bitvec n, card_bitvec m] at h_card
     exact Nat.pow_right_injective (by norm_num) h_card
-  · -- ケース 2: = → ≃
-    intro h
+  · intro h
     rw [h]
-    -- 命題の世界なので、Nonempty.intro を使って「存在する」ことを示す
     exact Nonempty.intro (Equiv.refl _)
 
 
@@ -252,7 +246,6 @@ lemma U1_eq_map_boolEquiv :
   rw [@uniformOfFintype_map_equiv]
 
 
-/- U 1 から 1bit 取り出す操作は、一様な Bool 分布からのサンプリングと等しい -/
 export BVCryptGame(U1_getLsbD_eq_uniformBool)
 
 /-- The uniform distribution over a product type `α × β` equals independent sampling:

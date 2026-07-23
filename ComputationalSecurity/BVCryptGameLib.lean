@@ -269,22 +269,16 @@ end PMF
 /-- Theorem: Uniformity is preserved under isomorphism (mapping an Equiv). -/
 theorem U_map_equiv {α β : Type*} [Fintype α] [Fintype β] [Nonempty α] [Nonempty β] (e : α ≃ β) :
   (PMF.uniformOfFintype α).map e = PMF.uniformOfFintype β := by
-  -- 1. 両辺のPMFがすべての値 b : β において等しいことを示す
   apply PMF.ext
   intro b
-  -- 2. 左辺の map と一様分布の定義を展開
+
   rw [PMF.map_apply, PMF.uniformOfFintype_apply]
-  -- 3. e が全単射なので、和 (tsum) の中で e a = b となる a は e.symm b の1点のみ
   rw [tsum_eq_single (e.symm b)]
-  · -- Case: a = e.symm b のとき
-    simp only [Equiv.apply_symm_apply, ite_true]
-    -- 4. card α = card β なので、確率は等しい
+  · simp only [Equiv.apply_symm_apply, ite_true]
     rw [PMF.uniformOfFintype_apply]
     congr
     exact Fintype.card_congr e
-  · -- Case: a ≠ e.symm b のとき、すべて 0 になることを示す
-    intro a ha
-    -- e a = b と仮定すると a = e.symm b となり ha に矛盾するため、e a ≠ b
+  · intro a ha
     have : e a ≠ b := by
       intro h_eq
       exact ha ((Equiv.eq_symm_apply e).mpr h_eq)
@@ -296,39 +290,28 @@ theorem U_map_equiv {α β : Type*} [Fintype α] [Fintype β] [Nonempty α] [Non
 theorem uniformOfFintype_prod_eq_prod {α β : Type*}
       [Fintype α] [Fintype β] [Nonempty α] [Nonempty β] :
     PMF.uniformOfFintype (α × β) = PMF.prod (PMF.uniformOfFintype α) (PMF.uniformOfFintype β) := by
-  -- 1. すべてのペア (a_target, b_target) において確率が一致することを示す
   apply PMF.ext
   intro ⟨a_target, b_target⟩
 
-  -- 2. 左辺 (LHS) の値: 1 / card (α × β)
   rw [PMF.uniformOfFintype_apply]
 
-  -- 3. 右辺 (RHS) の展開: bind と map の定義へ
   unfold PMF.prod
   rw [PMF.bind_apply]
 
-  -- 4. 外側の tsum (a に関する和) を a_target のみに絞る
   rw [tsum_eq_single a_target]
-  · -- Case: a = a_target の時
-    rw [PMF.uniformOfFintype_apply, PMF.map_apply]
-    -- 内側の tsum (b に関する和) を b_target のみに絞る
+  · rw [PMF.uniformOfFintype_apply, PMF.map_apply]
     rw [tsum_eq_single b_target]
-    · -- Case: b = b_target の時
-      simp only [ite_true, PMF.uniformOfFintype_apply]
-      -- 5. 最後に濃度の計算: 1 / (card α * card β) = 1 / card (α × β)
+    · simp only [ite_true, PMF.uniformOfFintype_apply]
       rw [Fintype.card_prod]
-      -- ENNReal の計算（1/n * 1/m = 1/(n*m)）
       rw [← ENNReal.mul_inv]
       · norm_cast
       · simp [Fintype.card_ne_zero]
       · simp [Fintype.card_ne_zero]
-    · -- Case: b ≠ b_target の時
-      intro b hb
+    · intro b hb
       simp only [Prod.mk.injEq, true_and, uniformOfFintype_apply, ite_eq_right_iff,
         ENNReal.inv_eq_zero, ENNReal.natCast_ne_top, imp_false]
       exact Ne.intro (id (Ne.symm hb))
-  · -- Case: a ≠ a_target の時、内側の確率は 0 になる
-    intro a ha
+  · intro a ha
     rw [PMF.map_apply]
     simp only [uniformOfFintype_apply, Prod.mk.injEq, tsum_fintype, mul_eq_zero,
       ENNReal.inv_eq_zero, ENNReal.natCast_ne_top, Finset.sum_eq_zero_iff, Finset.mem_univ,
@@ -434,16 +417,13 @@ theorem U_split3_i {L : ℕ} (i : Fin L) :
   have h_len : L = i + 1 + (L - i - 1) := by omega
   calc
     U L
-    -- 1. 型の不一致を U_cast で解消
     _ = (U (i + 1 + (L - i - 1))).map (bv_cast_equiv (by omega)).symm := by rw [U_cast]
-    -- 2. U_split3 を使って3つに分解
     _ = (do
           let x ← U i
           let b ← U 1
           let y ← U (L - i - 1)
           PMF.pure (bv_join3 i 1 (L - i - 1) (x, b, y))
         ).map (bv_cast_equiv h_len).symm := by rw [U_split3]
-    -- 3. map を pure の中へ押し込む (simp を使用)
     _ = (do
           let x ← U i
           let b ← U 1
@@ -453,16 +433,13 @@ theorem U_split3_i {L : ℕ} (i : Fin L) :
         erw [PMF.map_bind]; congr; funext b
         erw [PMF.map_bind]; congr; funext y
         simp only [PMF.pure_map]
-    -- 4. 最後に pure の中身が bv_join3_i の定義と一致することを確認
     _ = (do let x ← U i; let b ← U 1; let y ← U (L - i - 1); PMF.pure (bv_join3_i i (x, b, y))) := by
         rfl
 
 /-- Sampling `U L` is equivalent to sampling `U i` and `U (L - i)` independently and joining. -/
 theorem U_split_i {L : ℕ} (i : Fin (L + 1)) :
   U L = (do let x ← U i; let y ← U (L - i); PMF.pure (bv_join_i i (x, y))) := by
-  -- 1. Align the types using U_cast
   rw [U_cast (n := L) (m := i + (L - i)) (by omega)]
-  -- 2. Apply the structural split theorem
   rw [U_split i (L - i)]
   erw [map_bind]; congr; funext a
   erw [map_bind]; congr; funext x
@@ -622,7 +599,7 @@ theorem Pr_prediction_logic (f : Bool → PMF Bit) (target : Bool) :
   Pr (do let w ← PMF.uniformOfFintype Bool; let a ← f w; PMF.pure ((if a == 1 then w else !w) == target)) +
   Pr (do let w ← PMF.uniformOfFintype Bool; let a ← f w; PMF.pure (a == 1)) =
   1 / 2 + Pr (do let a ← f target; PMF.pure (a == 1)) := by
-  -- 証明は tsum_bool を使って w=true と w=false で場合分けすれば解けます
+
   simp only [Pr, Bind.bind, PMF.bind_apply, PMF.pure_apply, PMF.uniformOfFintype_apply, Fintype.card_bool]
   simp only [tsum_bool, Nat.cast_ofNat]
   cases target <;>

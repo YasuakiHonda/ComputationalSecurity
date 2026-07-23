@@ -109,7 +109,6 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
     ) := by
   calc
     (U L).map (fun x => (x.extractLsb' (L - i) i, x.getLsbD (L - i - 1)))
-    -- Step 1: 生のビット演算を、ライブラリの同型(bv_split3_i)の射影に貼り替える
     _ = (U L).map (fun x =>
           let triple := bv_split3_i i x
           (triple.1, triple.2.1.getLsbD 0)) := by
@@ -123,22 +122,18 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
           let triple := bv_split3_i i (bv_join3_i i (pre, bit, suf))
           PMF.pure (triple.1, triple.2.1.getLsbD 0)) := by
         rw [U_split3_i i]
-        -- map_bind と pure_map で、外側の map を一気に pure の中へ
         simp only [map_bind_do, map_pure_do]
-    -- Step 3: 同型の「行って戻る」性質 (apply_symm_apply) で式を簡約
     _ = (do
           let pre ← U i
           let bit ← U 1
           let suf ← U (L - i - 1)
           PMF.pure (pre, bit.getLsbD 0)) := by
         simp only [bv_join3_i, Equiv.apply_symm_apply]
-    -- Step 4: 使っていないサフィックス (suf) を削除
     _ = (do
           let pre ← U i
           let bit ← U 1
           PMF.pure (pre, bit.getLsbD 0)) := by
         simp only [bind_unused]
-    -- Step 5: BitVec 1 からのサンプリングを Bool のサンプリングへ変換
     _ = (do
           let pre ← U i
           let b ← PMF.uniformOfFintype Bool
