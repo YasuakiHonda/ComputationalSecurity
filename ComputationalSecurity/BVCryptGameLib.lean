@@ -148,6 +148,81 @@ theorem bv_split3_i_proj_bool {L : ℕ} (i : Fin L) (x : BitVec L) :
   rw [bv_split3_i_proj_bit]
   simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.getElem_extractLsb', add_zero]
 
+/-- The suffix `BitVec (L - i)` obtained by `bv_split_i` at `i.castSucc`, viewed as a
+    joined `(bit, shorter-suffix)` pair via the length-matching cast. -/
+noncomputable def suf_as_bit_suf {L : ℕ} (i : Fin L) :
+    BitVec (L - (i.castSucc : Fin (L+1))) ≃ BitVec 1 × BitVec (L - i - 1) :=
+  (bv_cast_equiv (by simp only [Fin.val_castSucc]; omega)).trans (bv_split 1 (L - i - 1))
+
+lemma bv_split_i_castSucc_eq_split3_i {L : ℕ} (i : Fin L)
+    (p : BitVec i) (b : BitVec 1) (s : BitVec (L - i - 1)) :
+    (bv_split_i (i.castSucc : Fin (L + 1))).symm (p, (suf_as_bit_suf i).symm (b, s)) =
+    (bv_split3_i i).symm (p, b, s) := by
+  apply BitVec.eq_of_toNat_eq
+  unfold bv_split_i suf_as_bit_suf bv_split3_i bv_split3 bv_split bv_cast_equiv
+  simp only [Equiv.symm_trans_apply, Equiv.prodCongr_symm,
+    Equiv.prodCongr_apply, Equiv.refl_symm, Equiv.refl_apply, Equiv.coe_fn_symm_mk]
+  simp only [BitVec.toNat_cast, BitVec.toNat_append]
+  simp only [Fin.val_castSucc, Equiv.coe_refl, Prod.map_apply, id_eq, BitVec.toNat_append]
+  erw [BitVec.toNat_append, BitVec.toNat_cast, BitVec.toNat_append]
+  · have h_exp : 1 + (L - i - 1) = L - (i : ℕ) := by omega
+    rw [h_exp]
+  · rfl
+
+/-- Corollary: the prefix component agrees between the two-way split (at i.castSucc)
+    and the three-way split (at i). Derived purely from `bv_split_i_castSucc_eq_split3_i`
+    via `Equiv` manipulation — no bit-level reasoning needed here. -/
+lemma bv_split_i_castSucc_fst_eq_split3_i_fst {L : ℕ} (i : Fin L) (x : BitVec L) :
+    (bv_split_i (i.castSucc : Fin (L + 1)) x).1 = (bv_split3_i i x).1 := by
+  have h := bv_split_i_castSucc_eq_split3_i i
+    (bv_split3_i i x).1 (bv_split3_i i x).2.1 (bv_split3_i i x).2.2
+  simp only [Prod.mk.eta, Equiv.symm_apply_apply] at h
+  -- h : (bv_split_i i_curr).symm ((bv_split3_i i x).1, (suf_as_bit_suf i).symm (...)) = x
+  have h2 := congrArg (bv_split_i (i.castSucc : Fin (L + 1))) h
+  rw [Equiv.apply_symm_apply] at h2
+  exact congrArg Prod.fst h2.symm
+
+/-- The prefix `BitVec (i+1)` obtained by `bv_split_i` at `i.succ`, viewed as a
+    joined `(shorter-prefix, bit)` pair via the length-matching cast. -/
+noncomputable def pre_as_pre_bit {L : ℕ} (i : Fin L) :
+    BitVec ((i.succ : Fin (L+1)) : ℕ) ≃ BitVec i × BitVec 1 :=
+  (bv_cast_equiv (by simp only [Fin.val_succ])).trans (bv_split i 1)
+
+/-- Compatibility between the two-way split `bv_split_i` (at i.succ) and the
+    three-way split `bv_split3_i` (at i): joining the prefix and the bit from
+    `bv_split3_i` agrees with the prefix component of `bv_split_i` at i+1.
+    This is the mirror image of `bv_split_i_castSucc_eq_split3_i`. -/
+lemma bv_split_i_succ_eq_split3_i {L : ℕ} (i : Fin L)
+    (p : BitVec i) (b : BitVec 1) (s : BitVec (L - i - 1)) :
+    (bv_split_i (i.succ : Fin (L + 1))).symm ((pre_as_pre_bit i).symm (p, b), s) =
+    (bv_split3_i i).symm (p, b, s) := by
+  apply BitVec.eq_of_toNat_eq
+  unfold bv_split_i pre_as_pre_bit bv_split3_i bv_split3 bv_split bv_cast_equiv
+  simp only [Equiv.symm_trans_apply, Equiv.prodCongr_symm, Equiv.prodCongr_apply,
+    Equiv.refl_symm, Equiv.refl_apply, Equiv.coe_fn_symm_mk]
+  erw [BitVec.toNat_append, BitVec.toNat_cast, BitVec.toNat_append]
+  simp only [Fin.val_succ, Equiv.coe_refl, Prod.map_apply, id_eq, BitVec.cast_cast,
+    BitVec.toNat_cast, BitVec.toNat_append]
+  generalize hp : p.toNat = pn
+  generalize hb : b.toNat = bn
+  generalize hs : s.toNat = sn
+  have h_exp : L - (↑i + 1) = L - ↑i - 1 := by omega
+  rw [h_exp, Nat.shiftLeft_or_distrib, ← Nat.shiftLeft_add, Nat.or_assoc]
+
+/-- Corollary: the prefix component of the two-way split (at i.succ) agrees with
+    the joined (prefix, bit) pair from the three-way split (at i), via `pre_as_pre_bit`.
+    Derived purely from `bv_split_i_succ_eq_split3_i` via `Equiv` manipulation. -/
+lemma bv_split_i_succ_fst_eq_pre_as_pre_bit_symm {L : ℕ} (i : Fin L) (x : BitVec L) :
+    (bv_split_i (i.succ : Fin (L + 1)) x).1 =
+    (pre_as_pre_bit i).symm ((bv_split3_i i x).1, (bv_split3_i i x).2.1) := by
+  have h := bv_split_i_succ_eq_split3_i i
+    (bv_split3_i i x).1 (bv_split3_i i x).2.1 (bv_split3_i i x).2.2
+  simp only [Prod.mk.eta, Equiv.symm_apply_apply] at h
+  have h2 := congrArg (bv_split_i (i.succ : Fin (L + 1))) h
+  rw [Equiv.apply_symm_apply] at h2
+  rw [eq_comm] at h2
+  exact congrArg Prod.fst h2
+
 /-- Equivalence between `BitVec 1` and `Bool`. -/
 def bv_to_bool : BitVec 1 ≃ Bool where
   toFun v := v.getLsbD 0
@@ -500,6 +575,19 @@ lemma Pr_compl (p : PMF Bool) :
              tsum_bool, Bool.not_true, Bool.not_false, ↓reduceIte]
   apply ENNReal.eq_sub_of_add_eq' (by norm_num)
   simp only [mul_one, Bool.true_eq_false, ↓reduceIte, mul_zero, add_zero, h]
+
+/-- The reverse direction of `Pr_compl`: the probability of the negated event
+    equals one minus the original probability. -/
+lemma Pr_negate (p : PMF Bool) :
+    Pr (p.bind (fun b => PMF.pure (!b))) = 1 - Pr p := by
+  unfold Pr
+  have h := p.tsum_coe
+  rw [tsum_bool, add_comm] at h
+  simp only [PMF.bind_apply, PMF.pure_apply, tsum_bool,
+             Bool.not_true, Bool.not_false, ↓reduceIte]
+  apply ENNReal.eq_sub_of_add_eq' (by norm_num)
+  simp only [mul_one, Bool.true_eq_false, ↓reduceIte, mul_zero, add_zero]
+  rw [add_comm]; exact h
 
 /-- For any boolean `a`, the function `(a == ·)` is an equivalence of Bool. -/
 def bool_beq_equiv (a : Bool) : Bool ≃ Bool where
