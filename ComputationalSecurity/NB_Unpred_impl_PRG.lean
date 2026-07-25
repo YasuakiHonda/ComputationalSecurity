@@ -14,15 +14,15 @@ open BVCryptGame
 variable {α : Type}
 
 -- ============================================================
--- 1. アルゴリズムの構成 (既存スタイル通りの定義)
+-- 1. Algorithm constructions
 -- ============================================================
 
-/-- 識別器 A を反転させた新しい識別器 -/
+/-- A new distinguisher that negates the output of `A`. -/
 noncomputable def negate_distinguisher (A : α → PMF Bit) (x : α) : PMF Bit := do
   let a ← A x
   PMF.pure (if a == 1 then 0 else 1)
 
-/-- 識別器の出力を反転すると、成功確率は 1 - (元の確率) になる。 -/
+/-- Negating a distinguisher's output turns its success probability into `1 - original`. -/
 lemma PrDX_one_negate {α : Type} (Y : PMF α) (A : α → PMF Bit) :
     PrDX_one Y (negate_distinguisher A) = 1 - PrDX_one Y A := by
   unfold PrDX_one
@@ -39,30 +39,30 @@ lemma PrDX_one_negate {α : Type} (Y : PMF α) (A : α → PMF Bit) :
   rw [ENNReal.toReal_sub_of_le (PMF.coe_le_one q true) (by norm_num)]
   rfl
 
-/-- 識別器 A から予測器 B を作る構成 -/
+/-- Constructs a next-bit predictor `B` from a distinguisher `A`. -/
 noncomputable def predictor_B (A : α × Bool → PMF Bit) (x : α) : PMF Bool := do
   let z ← PMF.uniformOfFintype Bool
   let a ← A (x, z)
   PMF.pure (if a == 1 then z else !z)
 
 -- ============================================================
--- 2. アドバンテージと成功確率の再定義 (2引数・ジョイント分布版)
+-- 2. Advantage and success probability (joint-distribution version)
 -- ============================================================
 
-/-- ジョイント分布 X_joint における識別器 A のアドバンテージ。
-    α は prefix の型 (BitVec i など) を指す。 -/
+/-- The advantage of distinguisher `A` on the joint distribution `X_joint`.
+    `α` is the type of the prefix (e.g. `BitVec i`). -/
 noncomputable def advantage {α : Type} (X_joint : PMF (α × Bool)) (A : α × Bool → PMF Bit) : ℝ :=
   PrDX_one X_joint A -
   PrDX_one (do let (x, _) ← X_joint; let u ← U 1; PMF.pure (x, u.getLsbD 0)) A
 
-/-- 反転した識別器のアドバンテージは、元のアドバンテージの符号反転に等しい。 -/
+/-- The advantage of a negated distinguisher is the negation of the original advantage. -/
 lemma advantage_negate {α : Type} (X_joint : PMF (α × Bool)) (A : α × Bool → PMF Bit) :
     advantage X_joint (negate_distinguisher A) = - advantage X_joint A := by
   unfold advantage
   rw [PrDX_one_negate, PrDX_one_negate]
   ring
 
-/-- ジョイント分布 X_joint における予測器 B の成功確率。 -/
+/-- The success probability of predictor `B` on the joint distribution `X_joint`. -/
 noncomputable def prediction_success_prob {α : Type}
       (X_joint : PMF (α × Bool)) (B : α → PMF Bool) : ℝ :=
   (Pr (do
@@ -72,34 +72,30 @@ noncomputable def prediction_success_prob {α : Type}
   )).toReal
 
 -- ============================================================
--- 3. 補題 4.2 (Prediction Lemma)
+-- 3. Lemma 4.2 (Prediction Lemma)
 -- ============================================================
 
-/-- 補題 4.2 の核心となる等式 -/
+/-- The core identity behind Lemma 4.2. -/
 lemma predictor_B_success_eq_half_plus_adv {α : Type} (X_joint : PMF (α × Bool))
     (A : α × Bool → PMF Bit) :
     prediction_success_prob X_joint (predictor_B A) = 1 / 2 + advantage X_joint A := by
   unfold prediction_success_prob advantage PrDX_one
   rw [bind_assoc,bind_assoc,bind_assoc]
 
-  -- 実数の等号を ENNReal の等号に持ち上げる
-
+  -- Lift the real equality to an ENNReal equality.
   have h_real_goal :
       (Pr (do let (x, p_x) ← X_joint; let b ← predictor_B A x; PMF.pure (b == p_x))).toReal
       + (Pr (do let (x, _) ← X_joint; let b ← PMF.uniformOfFintype Bool; let a ← A (x, b); PMF.pure (a == 1))).toReal
       = (1 / 2 : ℝ) + (Pr (do let (x, p_x) ← X_joint; let a ← A (x, p_x); PMF.pure (a == 1))).toReal := by
-
-    -- ここなら 1/2 + ... という形が綺麗に ENNReal と対応する
     have h_enn : (Pr (do let (x, p_x) ← X_joint; let b ← predictor_B A x; PMF.pure (b == p_x)))
                + (Pr (do let (x, _) ← X_joint; let b ← PMF.uniformOfFintype Bool; let a ← A (x, b); PMF.pure (a == 1)))
                = (1 / 2 : ENNReal) + (Pr (do let (x, p_x) ← X_joint; let a ← A (x, p_x); PMF.pure (a == 1))) := by
-      -- この have の中で U1_getLsbD_eq_uniformBool を適用して advantage の項と同期させる
       unfold predictor_B
       simp only [bind_assoc, Fin.isValue]
       erw [Pr_bind, Pr_bind, Pr_bind]
       rw [← ENNReal.tsum_add]
       simp_rw [← mul_add]
-      -- 1. ゴールの中にある複雑な第1項が、任意の x, target について定理の形と一致することを示す
+      -- The complex first term matches `Pr_prediction_logic` for any `x`, `target`.
       have h_sub (x_val : α) (target_val : Bool) :
         Pr (do
           let x ← uniformOfFintype Bool
@@ -110,7 +106,6 @@ lemma predictor_B_success_eq_half_plus_adv {α : Type} (X_joint : PMF (α × Boo
           let w ← uniformOfFintype Bool
           let a ← (fun w => A (x_val, w)) w
           PMF.pure ((if a == 1 then w else !w) == target_val)) := by
-        -- 定義の展開とモナドの法則（pure_bind）だけで一致するはず
         simp only [Fin.isValue, beq_iff_eq]
         congr; funext x; congr; funext x_1;
         simp only [Bind.bind, PMF.pure_bind]
@@ -122,10 +117,8 @@ lemma predictor_B_success_eq_half_plus_adv {α : Type} (X_joint : PMF (α × Boo
       rw [ENNReal.tsum_mul_right, tsum_coe,one_mul]
 
 
-    -- ENNReal の等式 h_enn を toReal して h_real_goal を導く
-    -- (ENNReal.toReal_add 等を使用して和を分配する)
+    -- Lift `h_enn` to `ℝ` via `toReal`, distributing the sum.
     have h_toReal := congrArg ENNReal.toReal h_enn
-    -- 確率値が有限であることを保証する補題 (ne_top) を適宜使用
     erw [ENNReal.toReal_add (PMF.apply_ne_top _ _) (PMF.apply_ne_top _ _)] at h_toReal
     erw [ENNReal.toReal_add (by norm_num) (PMF.apply_ne_top _ _)] at h_toReal
     simp only [ENNReal.toReal_div, ENNReal.toReal_one, ENNReal.toReal_ofNat] at h_toReal
@@ -144,7 +137,7 @@ lemma predictor_B_success_eq_half_plus_adv {α : Type} (X_joint : PMF (α × Boo
   congr
 
 
-/-- 補題 4.2: 計算量と成功確率の保証 -/
+/-- Lemma 4.2: complexity and success-probability guarantee for the constructed predictor. -/
 lemma prediction_lemma {α : Type} (X_joint : PMF (α × Bool))
     (A : α × Bool → PMF Bit) (tA : ℕ) (ε : ℝ) (t_redB : ℕ) :
     |advantage X_joint A| > ε →
@@ -163,50 +156,47 @@ lemma prediction_lemma {α : Type} (X_joint : PMF (α × Bool))
         linarith
   | inr h_neg => -- adv < -ε
       use (predictor_B (negate_distinguisher A)), (tA + t_redB)
-      -- A を反転させた場合でも計算量の増分 t_redB は同じと仮定（または調整）
       constructor
       · rfl
-      · -- Adv(A_not) = -Adv(A) を用いて linarith
-        rw [predictor_B_success_eq_half_plus_adv, advantage_negate]
+      · rw [predictor_B_success_eq_half_plus_adv, advantage_negate]
         · linarith
 
 
 
 -- ============================================================
--- 4. 定理 4.2 (NB-予測不可能 ↔ 擬似ランダム)
+-- 4. Theorem 4.2 (NB-unpredictability ↔ pseudorandomness)
 -- ============================================================
 
 -- ============================================================
--- 1. ビット切り出しと同型写像の定義 (X_joint)
+-- 1. Bit extraction and the isomorphism defining `X_joint`
 -- ============================================================
 
-/-- 分布 X から (prefix, next_bit) を取り出すジョイント分布。
-    bv_split3_i i を使い、真ん中の 1ビットを Bool として取り出す。 -/
+/-- The joint distribution of `(prefix, next_bit)` extracted from `X`.
+    Uses `bv_split3_i i`, converting the middle bit to `Bool`. -/
 noncomputable def X_joint (X : PMF (BitVec L)) (i : Fin L) : PMF (BitVec i × Bool) :=
   X.map (fun x =>
     let triple := bv_split3_i i x
-    (triple.1, triple.2.1.getLsbD 0) -- BitVec 1 を Bool に変換
+    (triple.1, triple.2.1.getLsbD 0)
   )
 
 -- ============================================================
--- 2. ハイブリッド分布の定義
+-- 2. Hybrid distribution definition
 -- ============================================================
--- ============================================================
--- 1. `castEquiv` と `bitvecEquiv'` (型問題を解決するインフラ)
+-- Infrastructure: `bitvecEquiv'` resolving type issues
 -- ============================================================
 
 
-/-- L = i + (L - i) という証明を内蔵した bitvec_equiv。
-    これにより H の定義での型エラーを根本的に解決する。 -/
+/-- `bv_split_i` specialized with the proof `L = i + (L - i)` baked in,
+    avoiding type errors in `H`'s definition. -/
 noncomputable def bitvecEquiv' (L : ℕ) (i : Fin (L + 1)) : BitVec L ≃ BitVec i × BitVec (L - i) := by
   exact @bv_split_i L i
 
-/-- H i : bitvecEquiv' を使うことで、型エラーを回避した定義。 -/
+/-- The hybrid distribution `H X i`: prefix `i` bits from `X`, suffix from `U L`,
+    joined via `bitvecEquiv'`. -/
 noncomputable def H (X : PMF (BitVec L)) (i : Fin (L + 1)) : PMF (BitVec L) :=
   do
     let x ← X
     let u ← U L
-    -- L = i + (L-i) の証明 h を内蔵した bitvecEquiv' で分解・結合
     let x_parts := bitvecEquiv' L i x
     let u_parts := bitvecEquiv' L i u
     PMF.pure ((bitvecEquiv' L i).symm (x_parts.1, u_parts.2))
@@ -227,10 +217,10 @@ lemma Pr_predict_success_eq_prediction_success_prob {L : ℕ} (X : PMF (BitVec L
   rfl
 
 -- ============================================================
--- 3. ハイブリッド関連の補題 (インフラ層)
+-- 3. Hybrid-argument infrastructure lemmas
 -- ============================================================
 
-/-- [境界 0]: H X 0 = U L -/
+/-- [Boundary 0]: `H X 0 = U L`. -/
 lemma H_zero_eq_U (X : PMF (BitVec L)) : H X 0 = U L := by
   unfold H
   simp only [Fin.coe_ofNat_eq_mod, Nat.zero_mod, Nat.sub_zero]
@@ -240,32 +230,30 @@ lemma H_zero_eq_U (X : PMF (BitVec L)) : H X 0 = U L := by
         let x_parts := bitvecEquiv' L 0 x
         let u_parts := bitvecEquiv' L 0 u
         PMF.pure ((bitvecEquiv' L 0).symm (x_parts.1, u_parts.2)))
-    -- Step 1: BitVec 0 の唯一性により、x_parts.1 は u_parts.1 と等しい
+    -- Step 1: `x_parts.1 = u_parts.1` since `BitVec 0` is a subsingleton.
     _ = (do let x ← X; let u ← U L
             let u_parts := bitvecEquiv' L 0 u
             PMF.pure ((bitvecEquiv' L 0).symm (u_parts.1, u_parts.2))) := by
         congr; funext x; congr; funext u
-        -- x_parts.1 と u_parts.1 は共に BitVec 0 なので一致する
         have h_pre : (bitvecEquiv' L 0 x).1 = (bitvecEquiv' L 0 u).1 := by
           exact BitVec.eq_of_getMsbD_eq fun i ↦ congrFun rfl
         simp only [h_pre]
-    -- Step 2: (u_parts.1, u_parts.2) は bitvecEquiv' の適用結果そのものなので、symm で u に戻る
+    -- Step 2: `symm` applied to `(u_parts.1, u_parts.2)` recovers `u`.
     _ = (do let x ← X; let u ← U L; PMF.pure u) := by
         congr; funext x; congr; funext u
         simp only [Prod.mk.eta, Equiv.symm_apply_apply]
-    -- Step 3: u を pure して終わる分布は、単なる U L と等しい (bind_pure)
+    -- Step 3: `pure`-ing the sampled value is just `U L` (`bind_pure`).
     _ = (do let x ← X; U L) := by
         congr; funext x
         exact PMF.bind_pure (U L)
-    -- Step 4: 結果に使われないサンプル x を破棄する (bind_const)
+    -- Step 4: discard the unused sample `x` (`bind_const`).
     _ = U L := by
         exact PMF.bind_const X (U L)
 
 
-/-- [境界 L]: H X L = X -/
+/-- [Boundary L]: `H X (Fin.last L) = X`. -/
 lemma H_L_eq_X (X : PMF (BitVec L)) : H X (Fin.last L) = X := by
   unfold H
-  -- L ≤ L は自明
   simp only [Fin.val_last]
 
   calc
@@ -273,34 +261,30 @@ lemma H_L_eq_X (X : PMF (BitVec L)) : H X (Fin.last L) = X := by
         let x_parts := bitvecEquiv' L (Fin.last L) x
         let u_parts := bitvecEquiv' L (Fin.last L) u
         PMF.pure ((bitvecEquiv' L (Fin.last L)).symm (x_parts.1, u_parts.2)))
-    -- Step 1: BitVec 0 (suffix) の唯一性により、u_parts.2 は x_parts.2 と等しい
+    -- Step 1: `u_parts.2 = x_parts.2` since the suffix `BitVec 0` is a subsingleton.
     _ = (do let x ← X; let u ← U L
             let x_parts := bitvecEquiv' L (Fin.last L) x
             PMF.pure ((bitvecEquiv' L (Fin.last L)).symm (x_parts.1, x_parts.2))) := by
         congr; funext x; congr; funext u
-        -- x_parts.2 と u_parts.2 は共に BitVec 0 なので一致する
         have h_suf : (bitvecEquiv' L (Fin.last L) u).2 = (bitvecEquiv' L (Fin.last L) x).2 := by
           simp only [Fin.val_last]
           apply Subsingleton.elim
-        -- let 束縛を展開しながら h_suf を適用
         simp only [h_suf]
-    -- Step 2: (x_parts.1, x_parts.2) を symm で戻すと x になる (symm_apply_apply)
+    -- Step 2: `symm` applied to `(x_parts.1, x_parts.2)` recovers `x`.
     _ = (do let x ← X; let u ← U L; PMF.pure x) := by
         congr; funext x; congr; funext u
         simp only [Prod.mk.eta, Equiv.symm_apply_apply]
-    -- Step 3: 結果に使われないサンプル u を破棄する (bind_const)
+    -- Step 3: discard the unused sample `u` (`bind_const`).
     _ = (do let x ← X; PMF.pure x) := by
         congr; funext x
         exact PMF.bind_const (U L) (PMF.pure x)
-    -- Step 4: サンプルした値をそのまま pure するのは、元の分布 X そのもの (bind_pure)
+    -- Step 4: `pure`-ing the sampled value is just `X` itself (`bind_pure`).
     _ = X := by
         exact PMF.bind_pure X
 
 
-/-- [中間ステップの架け橋]: H X i と H X (i+1) を、bv_split3_i i を使った形に展開する。
-    この補題の内部だけが、本プロジェクトで唯一ビット演算を許容する場所とする。 -/
-
-
+/-- Unfolds `H X i.castSucc` into the three-way `bv_split3_i` form
+    (prefix from `X`; bit and suffix uniform). -/
 lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
     H X ⟨i.castSucc, by omega⟩ = (do
       let x ← X; let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -312,7 +296,7 @@ lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
         let x_parts := bv_split_i (i.castSucc : Fin (L+1)) x
         let u_parts := bv_split_i (i.castSucc : Fin (L+1)) u
         PMF.pure ((bv_split_i (i.castSucc : Fin (L+1))).symm (x_parts.1, u_parts.2)))
-    -- Step 1: U L を U_split3_i でバラす（既存のLayer 3定理）
+    -- Step 1: split `U L` via `U_split3_i`.
     _ = (do
           let x ← X
           let u_pre ← U i; let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -324,8 +308,7 @@ lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
         rw [U_split3_i i]
         simp only [bind_assoc, pure_bind_do]
         rfl
-    -- Step 2: u_pre が未使用なので消す。かつ内側の bv_split_i の適用を、
-    -- 互換性補題を経由して (u_bit, u_suf) を組んだ形に整理する
+    -- Step 2: rewrite the suffix component via `bv_split_i_castSucc_eq_split3_i`.
     _ = (do
           let x ← X
           let u_pre ← U i; let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -348,7 +331,7 @@ lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
              (suf_as_bit_suf i).symm (u_bit, u_suf)))) := by
         congr 1; funext x
         rw [bind_unused]
-    -- Step 3: 互換性補題を「順方向」に適用し、bv_split_i を bv_split3_i にまとめて置き換える
+    -- Step 3: replace `bv_split_i` by `bv_split3_i` via the compatibility lemma.
     _ = (do
           let x ← X
           let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -357,7 +340,7 @@ lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
         congr 1; funext x; congr 1; funext u_bit; congr 1; funext u_suf
         congr 1
         exact bv_split_i_castSucc_eq_split3_i i _ u_bit u_suf
-    -- Step 4: prefix成分を bv_split3_i 版に貼り替える（先ほどの補正補題）
+    -- Step 4: replace the prefix component with its `bv_split3_i` form.
     _ = (do
           let x ← X
           let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -366,6 +349,8 @@ lemma H_step_equiv_curr (X : PMF (BitVec L)) (i : Fin L) :
         congr 1; funext x; congr 1; funext u_bit; congr 1; funext u_suf
         rw [bv_split_i_castSucc_fst_eq_split3_i_fst]
 
+/-- Unfolds `H X i.succ` into the three-way `bv_split3_i` form
+    (prefix and bit from `X`; suffix uniform). -/
 lemma H_step_equiv_next (X : PMF (BitVec L)) (i : Fin L) :
     H X ⟨i.succ, by omega⟩ = (do
       let x ← X; let u_suf ← U (L - i - 1)
@@ -377,7 +362,7 @@ lemma H_step_equiv_next (X : PMF (BitVec L)) (i : Fin L) :
         let x_parts := bv_split_i (i.succ : Fin (L+1)) x
         let u_parts := bv_split_i (i.succ : Fin (L+1)) u
         PMF.pure ((bv_split_i (i.succ : Fin (L+1))).symm (x_parts.1, u_parts.2)))
-    -- 旧Step 2: 未使用の u_pre を削除
+    -- Step 1: split `U L` via `U_split_i` and drop the unused prefix.
     _ = (do
           let x ← X
           let u_suf ← U (L - i - 1)
@@ -389,7 +374,7 @@ lemma H_step_equiv_next (X : PMF (BitVec L)) (i : Fin L) :
         simp only [bv_join_i, Equiv.apply_symm_apply]
         rw [bind_unused]
         rfl
-    -- Step 3: prefix成分を bv_split3_i の (prefix, bit) の組へ貼り替える
+    -- Step 2: replace the prefix component with the `(prefix, bit)` pair from `bv_split3_i`.
     _ = (do
           let x ← X
           let u_suf ← U (L - i - 1)
@@ -398,21 +383,21 @@ lemma H_step_equiv_next (X : PMF (BitVec L)) (i : Fin L) :
         congr 1; funext x; congr 1; funext u_suf
         congr 2; congr
         exact bv_split_i_succ_fst_eq_pre_as_pre_bit_symm i x
-    -- Step 4: 互換性補題で bv_split_i 全体を bv_split3_i にまとめて置き換える
+    -- Step 3: replace `bv_split_i` by `bv_split3_i` via the compatibility lemma.
     _ = (do
           let x ← X
           let u_suf ← U (L - i - 1)
           PMF.pure ((bv_split3_i i).symm ((bv_split3_i i x).1, (bv_split3_i i x).2.1, u_suf))) := by
         congr 1; funext x; congr 1; funext u_suf; congr 1
         exact bv_split_i_succ_eq_split3_i i _ _ u_suf
-    -- Step 5: let-パターンの表記に合わせるだけ
+    -- Step 4: match the `let`-pattern notation.
     _ = (do
           let x ← X; let u_suf ← U (L - i - 1)
           let (x_pre, x_bit, _) := bv_split3_i i x
           PMF.pure ((bv_split3_i i).symm (x_pre, x_bit, u_suf))) := rfl
 
-/-- [中間ステップのブリッジ]: H i と H i+1 の差分が X_joint のアドバンテージと一致することの保証。
-    ★ここが唯一「ビット演算の沼」を背負い、bv_split3_i と H の整合性を証明する場所。 -/
+/-- The difference between `H X i` and `H X (i+1)` equals the advantage of
+    `A_prime` on `X_joint X i`. -/
 lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L → PMF Bit) :
     let A_prime := fun (pair : BitVec i × Bool) => do
       let suf ← U (L - i - 1)
@@ -420,17 +405,16 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
       A ((bv_split3_i i).symm (pair.1, b_vec, suf))
     |PrDX_one (H X i.succ) A - PrDX_one (H X ⟨i, by omega⟩) A| = |advantage (X_joint X i) A_prime| := by
   intro A_prime
-  -- 1. ブリッジ補題を用いて H i と H i+1 を展開
+  -- 1. Unfold `H X i`/`H X (i+1)` via the bridge lemmas.
   have h_curr := H_step_equiv_curr X i
   have h_next := H_step_equiv_next X i
 
-  -- 2. PrDX_one (H X (i+1)) A = PrDX_one (X_joint X i) A_prime を示す
   have h_Pr_next : PrDX_one (H X i.succ) A = PrDX_one (X_joint X i) A_prime := by
     have h_enn : Pr (do let x ← H X i.succ; let a ← A x; PMF.pure (a == 1)) =
                Pr (do let pair ← X_joint X i; let a ← A_prime pair; PMF.pure (a == 1)) := by
       calc
         Pr (do let x ← H X i.succ; let a ← A x; PMF.pure (a == 1))
-        -- Step 1: ハイブリッド分布 H(i+1) を 3 分割の定義に展開 (インフラ補題を使用)
+        -- Step 1: unfold `H X (i+1)` via `H_step_equiv_next`.
         _ = Pr (do
               let x ← X; let u ← U L
               let (x_pre, x_bit, _) := bv_split3_i i x
@@ -446,7 +430,7 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
                 simp only [bv_join3_i, Equiv.apply_symm_apply]
                 simp only [bind_unused]
 
-        -- Step 2: U L をライブラリの定理 U_split3_i で 3 つの独立なサンプリングに分解
+        -- Step 2: split `U L` via `U_split3_i`.
         _ = Pr (do
               let x ← X
               let _u_pre ← U i; let _u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -454,23 +438,21 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
               let a ← A ((bv_split3_i i).symm (x_pre, x_bit, u_suf))
               PMF.pure (a == 1)) := by
             simp_rw [U_split3_i i, bind_assoc, pure_bind_do]
-            -- u の prefix と bit は H(i+1) では使われないため、簡約して消える準備をする
             simp only [bv_join3_i]
             simp only [Equiv.toFun_as_coe, Equiv.apply_symm_apply, Fin.isValue, bind_unused]
-        -- Step 3: 使っていない _u_pre, _u_bit をライブラリの bind_unused で消去
+        -- Step 3: drop the unused `_u_pre`, `_u_bit` via `bind_unused`.
         _ = Pr (do
               let x ← X; let u_suf ← U (L - i - 1)
               let (x_pre, x_bit, _) := bv_split3_i i x
               let a ← A ((bv_split3_i i).symm (x_pre, x_bit, u_suf))
               PMF.pure (a == 1)) := by
             simp only [bind_unused]
-        -- Step 4: X からのサンプリングを X_joint (X.map) の形にパッキングする
+        -- Step 4: repackage the `X` sampling as `X_joint`.
         _ = Pr (do
               let pair ← X_joint X i
               let a ← A_prime pair
               PMF.pure (a == 1)) := by
             unfold X_joint A_prime
-            -- map と bind の交換法則 (bind_map) で X.map を do pair ← X_joint に戻す
             unfold PMF.map
             simp only [bind_bind_do, Function.comp_apply, pure_bind_do, bind_assoc]
             simp only [Equiv.toFun_as_coe, Fin.isValue, zero_lt_one, BitVec.getLsbD_eq_getElem]
@@ -485,15 +467,13 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
     simp
     exact congrArg ENNReal.toReal h_enn
 
-  -- 3. PrDX_one (H X i) A = PrDX_one (do ... U 1) A_prime を示す
   have h_Pr_curr : PrDX_one (H X i.castSucc) A =
       PrDX_one (do let (pre, _) ← X_joint X i; let u ← U 1; PMF.pure (pre, u.getLsbD 0)) A_prime := by
     have h_enn : Pr (do let x ← H X i.castSucc; let a ← A x; PMF.pure (a == 1)) =
                Pr (do let pair ← X_joint X i; let u ← U 1; let a ← A_prime (pair.1, u.getLsbD 0); PMF.pure (a == 1)) := by
       calc
         Pr (do let x ← H X i.castSucc; let a ← A x; PMF.pure (a == 1))
-        -- 1. H(i) を 3分割形式の定義に展開 (h_curr を使用)
-        -- prefix は X から、bit と suffix は U L から取る形
+        -- 1. unfold `H X i` via `H_step_equiv_curr`.
         _ = Pr (do
               let x ← X; let u ← U L
               let x_pre := (bv_split3_i i x).1
@@ -506,7 +486,7 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
                 simp only [Equiv.toFun_as_coe, Prod.mk.eta]
                 simp only [bv_join3_i, Equiv.apply_symm_apply]
                 simp only [bind_unused]
-        -- 2. U L を U_split3_i でバラす (★ライブラリの真骨頂)
+        -- 2. split `U L` via `U_split3_i`.
         _ = Pr (do
               let x ← X
               let _u_pre ← U i; let u_bit ← U 1; let u_suf ← U (L - i - 1)
@@ -516,7 +496,7 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
                 simp_rw [U_split3_i i, bind_assoc, pure_bind_do,Prod.mk.eta]
                 simp only [Equiv.toFun_as_coe]
                 simp only [bv_join3_i, Equiv.apply_symm_apply]
-        -- 3. 未使用サンプリング (_u_pre) を削除
+        -- 3. drop the unused `_u_pre`.
         _ = Pr (do
               let x ← X; let u_bit ← U 1; let u_suf ← U (L - i - 1)
               let x_pre := (bv_split3_i i x).1
@@ -524,7 +504,7 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
               PMF.pure (a == 1)) := by
             simp only [bind_unused]
 
-        -- 4. X のサンプリングを X_joint にパッケージし、u_bit を使って A_prime に繋ぐ
+        -- 4. repackage as `X_joint` and feed `u_bit` to `A_prime`.
         _ = Pr (do
               let pair ← X_joint X i
               let u ← U 1
@@ -542,74 +522,62 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L �
     simp only [pure_bind_do]
 
 
-  -- 4. advantage の定義に代入
+  -- Substitute into `advantage`'s definition.
   unfold advantage
   rw [h_Pr_next]
   erw [h_Pr_curr]
 
 
 -- ============================================================
--- 4. 定理 4.2 本体 (メインロジック)
+-- 4. Theorem 4.2, main body
 -- ============================================================
 
-/-- 定理 4.2: 擬似ランダムでない ⇒ NB予測可能 (対偶)
-    t_redH: ハイブリッド識別器 A' を作る際のオーバーヘッド
-    t_redB: 予測器 B を作る際のオーバーヘッド (補題4.2の分) -/
+/-- Theorem 4.2 (contrapositive): not pseudorandom ⇒ next-bit predictable.
+    `t_redH`/`t_redB` are the complexity overheads of building the hybrid
+    distinguisher and the predictor. -/
 theorem unpredictability_implies_pseudorandomness {L : ℕ} {X : PMF (BitVec L)}
     (t : ℕ) (ε : NNReal) (t_redH t_redB : ℕ) (hL : L > 0) :
-    -- 仮定: 計算量 (t + t_redH + t_redB) 内で、アドバンテージ ε * L で識別できる敵がいる
+    -- Hypothesis: an adversary distinguishing with advantage `ε * L` at complexity `t`.
     ¬ DistIndistinguishable X (U L) t (ε * L) →
-    -- 結論: 計算量 t 内で、アドバンテージ ε/2 で予測できる予測器が存在する
-    -- (※ NextBitUnpredictable の定義内の ε は ℝ 上の ε/2 として扱われる)
+    -- Conclusion: a next-bit predictor with advantage `ε/2` at complexity `t + t_redH + t_redB`.
     ¬ NextBitUnpredictable X (t + t_redH + t_redB) ε := by
-  -- A. 準備: 識別器 A を取り出す
+  -- A. Extract the distinguisher `A`.
   intro h_not_pr
   unfold DistIndistinguishable at h_not_pr
   push_neg at h_not_pr
   obtain ⟨A, tA, htA, h_adv_A⟩ := h_not_pr
 
-  -- B. ハイブリッド境界 i の特定
+  -- B. Locate the hybrid boundary `i`.
   have h_total_adv : |PrDX_one (H X 0) A - PrDX_one (H X (Fin.last L)) A| > ((ε * L : NNReal) : ℝ) := by
-    rw [abs_sub_comm] -- |a - b| = |b - a| を使って順序を入れ替え
+    rw [abs_sub_comm]
     rw [H_L_eq_X, H_zero_eq_U]
-    -- ここで h_adv_A と一致するはずです。
-    -- もし型の詳細で詰まる場合は、一度 (h_adv_A : |PrDX_one X A - PrDX_one (U L) A| > (ε * L : ℝ))
-    -- との整合性を確認してください。
     exact h_adv_A
 
-  -- 既存の hybrid_lemma を適用して i を得る。
-  -- H は型制限が厳しいのでNatを渡るようにラッパーを作る。
+  -- Wrap `H` with a ℕ-indexed version to apply `hybrid_lemma`.
   let H_nat := fun (i : ℕ) => H X (if h : i < L + 1 then ⟨i, h⟩ else Fin.last L)
   have h_nat_0 : H_nat 0 = H X 0 := by
     dsimp [H_nat]
   have h_nat_L : H_nat L = H X (Fin.last L) := by
     dsimp [H_nat]
     simp only [Nat.lt_succ_self, ↓reduceDIte]
-    -- Fin L+1 の値 L は Fin.last L と定義上一致する
     rfl
   have h_total_adv_nat : |PrDX_one (H_nat 0) A - PrDX_one (H_nat L) A| > ((ε * L : NNReal) : ℝ) := by
     rw [h_nat_0, h_nat_L]
     exact h_total_adv
 
   have h_exists_i := hybrid_lemma H_nat L t (ε * L) hL A h_total_adv_nat
-  -- have h_exists_i := hybrid_lemma (H X) L (t + t_redH + t_redB) (ε * L) hL A h_total_adv
   obtain ⟨i, hi_range, h_adv_step⟩ := h_exists_i
   let i_fin : Fin L := ⟨i, hi_range⟩
 
-  -- C. 1ビット識別器 A' の構成 (bv_split3_i.symm を使用)
-  -- A' の引数は (BitVec i × BitVec 1)
+  -- C. Construct the one-bit distinguisher `A'` via `bv_split3_i.symm`.
   let A_prime := fun (pair : BitVec i_fin × Bool) => do
     let suf ← U (L - i - 1)
-    -- boolEquiv (ProbabilityUtils.leanで定義) を使って Bool を BitVec 1 に変換
-    -- これによりビット演算 (if b then 1#1 else 0#1) を回避しつつ同型を維持する
+    -- convert `Bool` to `BitVec 1` via `bv_to_bool.symm`, avoiding raw bit manipulation
     let b_vec := bv_to_bool.symm pair.2
     A ((bv_split3_i i_fin).symm (pair.1, b_vec, suf))
 
-  -- D. A' のアドバンテージ評価
-  -- H_step_diff_eq_advantage により、境界の差分を A' の Advantage に変換
+  -- D. Evaluate `A'`'s advantage via `H_step_diff_eq_advantage`.
   have h_adv_A' : |advantage (X_joint X i_fin) A_prime| > (ε : ℝ) := by
-    -- advantage の定義と H_step_diff_eq_advantage の整合性を利用
-    -- (※ X_joint が BitVec 1 ではなく Bool を返す場合は、適宜変換を挟む)
     rw [← H_step_diff_eq_advantage X i_fin A]
     have h_adv_simp : |PrDX_one (H_nat i) A - PrDX_one (H_nat (i + 1)) A| > (ε : ℝ) := by
       norm_cast at h_adv_step
@@ -635,25 +603,20 @@ theorem unpredictability_implies_pseudorandomness {L : ℕ} {X : PMF (BitVec L)}
     exact h_adv_simp
 
 
-  -- E. 予測補題 (Lemma 4.2) の適用
-  -- A' (計算量 tA') から、成功確率が高い予測器 B を得る
-  -- ここで A' の計算量 tA' = tA + t_redH と仮定する
-  let tA' := tA + t_redH -- 実際には構成に合わせて tA との関係を記述
+  -- E. Apply the prediction lemma to obtain `B` from `A'`.
+  let tA' := tA + t_redH
 
-  -- ε/2 のアドバンテージを得るために A' のアドバンテージ ε を利用
   obtain ⟨B, tB, htB, h_succ_B⟩ := prediction_lemma
                 (X_joint X i_fin) A_prime tA' (ε / 2) t_redB (by
                     have : ε.toReal ≥ ε.toReal / 2 := by exact NNReal.half_le_self ε
                     linarith [this, h_adv_A'])
 
-  -- F. 結論の構築
+  -- F. Assemble the conclusion.
   unfold NextBitUnpredictable
   push_neg
-  -- i_fin 番目のビットに対する予測器 B を提示
   use i_fin, B, tB
   constructor
-  · -- 計算量制約 tB ≤ t を示す
-    -- tA ≤ t + t_redH + t_redB かつ tB = tA' + t_redB などの関係を用いる
+  · -- complexity bound `tB ≤ t + t_redH + t_redB`.
     rw [htB]
     omega
   · rw [Pr_predict_success_eq_prediction_success_prob]

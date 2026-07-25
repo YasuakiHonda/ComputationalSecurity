@@ -55,10 +55,7 @@ def bv_cast_equiv {n m : ℕ} (h : n = m) : BitVec n ≃ BitVec m where
   left_inv x := by simp
   right_inv x := by simp
 
-/-- BitVec (1+n) ≃ BitVec (n+1)
-bv_one_add_comm_equiv is deprecated.
-Please use bitvec_add_comm_equiv instead.
--/
+/-- `BitVec (1+n) ≃ BitVec (n+1)`. Deprecated: use `bitvec_add_comm_equiv` instead. -/
 def bv_one_add_comm_equiv (n : ℕ) : BitVec (1 + n) ≃ BitVec (n + 1) := @bv_cast_equiv (1+n) (n+1) (by omega)
 abbrev bitvec_add_comm_equiv := bv_one_add_comm_equiv
 
@@ -154,6 +151,8 @@ noncomputable def suf_as_bit_suf {L : ℕ} (i : Fin L) :
     BitVec (L - (i.castSucc : Fin (L+1))) ≃ BitVec 1 × BitVec (L - i - 1) :=
   (bv_cast_equiv (by simp only [Fin.val_castSucc]; omega)).trans (bv_split 1 (L - i - 1))
 
+/-- Compatibility between `bv_split_i` (at `i.castSucc`) and `bv_split3_i` (at `i`).
+    The sole place where the two splitting schemes are reconciled bit-by-bit. -/
 lemma bv_split_i_castSucc_eq_split3_i {L : ℕ} (i : Fin L)
     (p : BitVec i) (b : BitVec 1) (s : BitVec (L - i - 1)) :
     (bv_split_i (i.castSucc : Fin (L + 1))).symm (p, (suf_as_bit_suf i).symm (b, s)) =
@@ -228,13 +227,13 @@ def bv_to_bool : BitVec 1 ≃ Bool where
   toFun v := v.getLsbD 0
   invFun b := if b then 1 else 0
   left_inv v := by
-    -- 1. BitVec の外延性（すべてのビットが等しければ BitVec は等しい）を適用
+    -- 1. Apply extensionality on `BitVec` bits.
     apply BitVec.eq_of_getLsbD_eq
     intro j hj
-    -- 2. 長さが 1 なので、インデックス j は 0 確定
+    -- 2. Length is 1, so `j = 0`.
     have hj0 : j = 0 := by omega
     simp [hj0]
-    -- 3. v.getLsbD 0 が true か false かで場合分け
+    -- 3. Case on `v.getLsbD 0`.
     cases v.getLsbD 0 <;> aesop
   right_inv b := by cases b <;> rfl
 
@@ -592,9 +591,8 @@ theorem Pr_comparison_uniform_bit (AnyDist : PMF Bool) :
   simp only [Pr, uniformOfFintype_apply]
   norm_num
 
-/-- The fundamental logic behind the Predictor-to-Distinguisher conversion.
-    The sum of (probability that B succeeds) and (probability that A outputs 1 on random)
-    equals (1/2) + (probability that A outputs 1 on real). -/
+/-- Core identity behind the predictor-to-distinguisher conversion:
+    `Pr[B succeeds] + Pr[A outputs 1 on random] = 1/2 + Pr[A outputs 1 on real]`. -/
 theorem Pr_prediction_logic (f : Bool → PMF Bit) (target : Bool) :
   Pr (do let w ← PMF.uniformOfFintype Bool; let a ← f w; PMF.pure ((if a == 1 then w else !w) == target)) +
   Pr (do let w ← PMF.uniformOfFintype Bool; let a ← f w; PMF.pure (a == 1)) =
@@ -645,15 +643,14 @@ lemma h_split_U (i L : Nat) (hL : i < L) : U (L - i) = do
         simp only [map_bind_do, map_pure_do]
         rfl
 
-/-- U 1 から 1bit 取り出す操作は、一様な Bool 分布からのサンプリングと等しい -/
+/-- Extracting one bit from `U 1` is the same as sampling from the uniform `Bool` distribution. -/
 lemma U1_getLsbD_eq_uniformBool {α : Type} (f : Bool → PMF α) :
     (do let u ← U 1; f (u.getLsbD 0)) =
     (do let b ← PMF.uniformOfFintype Bool; f b) := by
   calc
     (do let u ← U 1; f (u.getLsbD 0))
-    -- 1. getLsbD 0 は bv_to_bool の定義そのものであることを示す
+    -- 1. `getLsbD 0` is exactly `bv_to_bool`'s definition.
     _ = (do let u ← U 1; f (bv_to_bool u)) := by
-        -- bv_to_bool の定義を露出させて一致させる
         simp only [bv_to_bool]
         simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.ofNat_eq_ofNat, Equiv.coe_fn_mk]
     _ = (do let b ← (U 1).map bv_to_bool; f b) := by
