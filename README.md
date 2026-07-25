@@ -5,8 +5,13 @@ covering the equivalence between **Semantic Security** and **Indistinguishabilit
 and **Pseudorandomness** including computational indistinguishability of distributions,
 the Hybrid Argument, security under PRG-based key generation,
 the **PRG Sequential Extension** (Theorem 4.1) — constructing an L-bit PRG from a 1-bit PRG,
-and **Next-Bit Unpredictability** (Theorem 4.2, direction: pseudorandomness implies
-next-bit unpredictability).
+and the full equivalence **Next-Bit Unpredictability ⟺ Pseudorandomness** (Theorem 4.2,
+both directions).
+
+Proofs are built on `BVCryptGameLib`, a layered `Equiv`/`PMF`/`do`-notation infrastructure
+library (see `ComputationalSecurity/BVCryptGmaeLibHowTo.md`) that keeps distribution-equality
+proofs at the isomorphism level, avoiding descent into `tsum`/`Finset.sum` or raw `BitVec`
+bit-arithmetic wherever possible.
 
 Based on: Yasunaga, *Computational Security* (textbook), Chapters 3 and 4.
 
@@ -56,17 +61,23 @@ Both theorems are fully proved with no `sorry`.
   Proved via an L-step hybrid argument (`Hybrid 0 = U L` through `Hybrid L = G'_dist`).
   Fully proved with no `sorry`.
 
-- **Definition 4.5 — Next-Bit Unpredictability** (`NextBit_Unpredictable.lean`):
+- **Definition 4.5 — Next-Bit Unpredictability** (`PRG_impl_NB_Unpred.lean`):
   No efficient algorithm can predict the next bit of a pseudorandom sequence given
   all preceding bits with probability greater than 1/2 + ε/2.
-- **Theorem 4.2 (direction: PRG → NB unpredictable)** (`NextBit_Unpredictable.lean`):
-  If `G'` is `(t + t_extract, ε/2)`-pseudorandom, then `G'` is `(t, ε)`-next-bit
-  unpredictable. Proved via a reduction `predictor_to_distinguisher` and the key lemma
-  `PrDX_one_U_predictor_eq_half` (for the true uniform distribution, every predictor
-  succeeds with probability exactly 1/2).
-  Fully proved with no `sorry`.
+- **Theorem 4.2, direction PRG ⟹ NB-unpredictable** (`PRG_impl_NB_Unpred.lean`):
+  `pseudorandom_implies_unpredictable` — if `X` is `(t + t_extract, ε/2)`-pseudorandom,
+  then `X` is `(t, ε)`-next-bit unpredictable. Proved via a reduction
+  `predictor_to_distinguisher` and the key lemma `PrDX_one_U_predictor_eq_half`
+  (for the true uniform distribution, every predictor succeeds with probability exactly 1/2).
+- **Theorem 4.2, direction NB-unpredictable ⟹ PRG** (`NB_Unpred_impl_PRG.lean`):
+  `unpredictability_implies_pseudorandomness` — the converse direction. Proved via an
+  `L`-step hybrid argument over bit positions (`H X i`, interpolating between `U L` and `X`
+  one bit at a time), a reduction from a distinguisher to a next-bit predictor
+  (`prediction_lemma`, Lemma 4.2), and a sign-handling construction (`negate_distinguisher`)
+  covering both directions of advantage.
 
-All results are fully proved with no `sorry`.
+Both directions are fully proved with no `sorry`, giving the full equivalence stated in the
+textbook's Theorem 4.2.
 
 ## Build
 
@@ -84,6 +95,8 @@ Toolchain: `leanprover/lean4:v4.29.0-rc4`, Mathlib `v4.29.0-rc4`.
 ComputationalSecurity/
 ├── ComputationalSecurity.lean        # Top-level import aggregator
 └── ComputationalSecurity/
+    ├── BVCryptGameLib.lean           # Layered Equiv/PMF/do-notation infrastructure (Layers 1-4)
+    ├── BVCryptGmaeLibHowTo.md        # Design philosophy and working policy for BVCryptGameLib
     ├── ProbabilityUtils.lean         # Shared probability and BitVec utilities
     ├── Defs.lean                     # Core definitions (Def 3.4, 3.5)
     ├── GuessingLemma.lean            # Lemma 3.1 (Guessing Lemma)
@@ -92,11 +105,23 @@ ComputationalSecurity/
     ├── DistInd.lean                  # Chapter 4: Def 4.1, Prop 4.1, Hybrid Argument
     ├── PRGDefs.lean                  # Def 4.3, 4.4: IsPseudorandom, IsPRG
     ├── PRG_Sequential_Extension.lean # Theorem 4.1: PRG Sequential Extension
-    ├── NextBit_Unpredictable.lean    # Theorem 4.2: PRG implies Next-Bit Unpredictability
+    ├── PRG_impl_NB_Unpred.lean       # Theorem 4.2, direction PRG ⟹ NB-unpredictable
+    ├── NB_Unpred_impl_PRG.lean       # Theorem 4.2, direction NB-unpredictable ⟹ PRG
     └── ShortKey_CompSec.lean         # OTP, Security Transfer, FixedMessageIndistinguishable
 ```
 
 ## File Descriptions
+
+### `BVCryptGameLib.lean`
+A layered library for game-based cryptographic proofs, built to avoid two recurring
+pitfalls: descending to `tsum`/`Finset.sum` probability calculations, and getting stuck
+in dependent-type mismatches from `BitVec` length arithmetic (e.g. `BitVec (n+m)` vs
+`BitVec (m+n)`). Organized into four layers: **Layer 1** (`BitVec` structural equivalences
+— `bv_split`, `bv_split_i`, `bv_split3_i`, and related `Equiv`-based decompositions),
+**Layer 2** (general `PMF` infrastructure), **Layer 3** (`U n`, the uniform distribution
+over `BitVec n`, and its `bind`/`map`/`Equiv` decomposition lemmas), and **Layer 4**
+(`do`-notation rewriting rules and `Pr`-level lemmas for game transformations). See
+`BVCryptGmaeLibHowTo.md` for the full design rationale and working policy.
 
 ### `ProbabilityUtils.lean`
 Shared utilities used throughout the project. Defines `Bit` (`Fin 2`), `randomBit` (uniform PMF over `Bit`), `Pr` (probability of a `PMF Bool` outputting `true`), and `U` (the uniform distribution over `BitVec n`). Also provides `bitvec_equiv`, `card_bitvec`, `U_add_dist`, `h_split_U`, and related BitVec combinatorial lemmas used in the PRG Sequential Extension proof. Helper lemmas for ENNReal arithmetic and PMF bounds are also included.
@@ -166,7 +191,7 @@ Formalizes Theorem 4.1 and its supporting construction (Figure 4.2).
 - `PRG_Sequential_Extension`: the main theorem — if `G` is `(t + L·cost_G, ε/L)`-secure,
   then `G'` is `(t, ε)`-secure.
 
-### `NextBit_Unpredictable.lean`
+### `PRG_impl_NB_Unpred.lean`
 Formalizes the direction "pseudorandomness implies next-bit unpredictability" of Theorem 4.2.
 
 - `Pr_predict_success`: probability that algorithm `A` correctly predicts the `(i+1)`-th bit
@@ -180,6 +205,23 @@ Formalizes the direction "pseudorandomness implies next-bit unpredictability" of
 - `PrDX_one_U_predictor_eq_half`: for the true uniform distribution `U L`, every predictor
   succeeds with probability exactly 1/2.
 - `pseudorandom_implies_unpredictable`: the main theorem.
+
+### `NB_Unpred_impl_PRG.lean`
+Formalizes the converse direction, "next-bit unpredictability implies pseudorandomness."
+
+- `X_joint`: the joint distribution of `(prefix, next-bit)` extracted from `X` via `bv_split3_i`.
+- `H`: the hybrid distribution interpolating between `U L` (at index 0) and `X` (at index `L`),
+  `i` bits at a time.
+- `H_step_equiv_curr`/`H_step_equiv_next`: unfold adjacent hybrids into the three-way
+  `bv_split3_i` form; the compatibility between this and `H`'s own two-way split is isolated
+  in two `BVCryptGameLib` lemmas (`bv_split_i_castSucc_eq_split3_i`, `bv_split_i_succ_eq_split3_i`)
+  — the only place in the proof where raw bit arithmetic is used.
+- `H_step_diff_eq_advantage`: the difference between adjacent hybrids equals the advantage
+  of a derived one-bit distinguisher `A'` on `X_joint`.
+- `negate_distinguisher`, `prediction_lemma`: Lemma 4.2 (the Prediction Lemma), constructing
+  a next-bit predictor from a distinguisher, handling both signs of advantage.
+- `unpredictability_implies_pseudorandomness`: the main theorem, combining the hybrid
+  argument with the prediction lemma.
 
 ### `ShortKey_CompSec.lean`
 Definitions and theorems connecting perfect secrecy, PRGs, and computational security.
@@ -209,6 +251,7 @@ Definitions and theorems connecting perfect secrecy, PRGs, and computational sec
 | `ENNReal` for probabilities | Native type for Mathlib's `PMF`; `.toReal` used at inequality boundaries |
 | `St` type parameter for adversary state | Enables stateful adversaries without fixing a concrete state type |
 | `NNReal` for advantage bound `ε` | Matches textbook (ε ≥ 0); simplifies inequality reasoning |
+| `BVCryptGameLib`'s `Equiv`-first `BitVec` layer | Avoids `cast`-proliferation from length arithmetic; theorem statements never mention `++`/`extractLsb'`/`getLsbD` outside Layer 1 |
 | `do`-notation for PMF | Consistent with the `Hybrid` definition style; avoids `bind`/`map` syntax mismatch |
 | `map`/`bind`/`Equiv` abstraction for proofs | Proofs of distribution equalities are kept at the `PMF.map`/`bind`/`Equiv` level; descent to `tsum`/`Finset.sum` is limited to a small set of infrastructure lemmas (`uniformOfFintype_map_equiv`, `uniformOfFintype_prod_eq_bind`) |
 

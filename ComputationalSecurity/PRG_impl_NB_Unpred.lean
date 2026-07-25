@@ -1,5 +1,5 @@
 /-
-  NextBit_Unpredictable.lean
+  PRG_impl_NB_Unpred.lean
 
   Formalizes the direction "pseudorandomness implies next-bit unpredictability"
   of Theorem 4.2 from the textbook.
@@ -114,7 +114,7 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
           (triple.1, triple.2.1.getLsbD 0)) := by
         congr; funext x
         simp only [bv_split3_i_proj_pre, bv_split3_i_proj_bool]
-    -- Step 2: U L を U_split3_i でバラし、map を do 文の奥底(pure)へ押し込む
+    -- Step 2: split `U L` via `U_split3_i`, pushing `map` down into the `pure` in the `do`-block.
     _ = (do
           let pre ← U i
           let bit ← U 1
@@ -138,7 +138,7 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
           let pre ← U i
           let b ← PMF.uniformOfFintype Bool
           PMF.pure (pre, b)) := by
-        -- U 1 を map bv_to_bool (U_Bool) に戻して整理
+        -- Convert `U 1` back via `bv_to_bool` (mapping to `U_Bool`).
         congr 1; funext pre
         rw [← U1_to_bool];
         simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, bind_map_do]
