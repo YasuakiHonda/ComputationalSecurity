@@ -13,7 +13,6 @@
     - formula1: an ENNReal algebraic identity used in the Guessing Lemma proof.
     - Fintype (BitVec n): instance for finite type over n-bit vectors.
     - U: the uniform distribution over {0,1}^n.
-    - bitvec_equiv: equivalence between BitVec (n+m) and BitVec n × BitVec m.
     - card_bitvec: cardinality of BitVec n is 2^n.
     - tsum_append_eq: sum over BitVec m of indicator for concatenation equality.
     - U_add_dist: uniform distribution over n+m bits equals sequential sampling.
@@ -140,38 +139,6 @@ export BVCryptGame (U)
 
 export BVCryptGame (card_bitvec)
 
-def bitVecProdEquiv (n m : Nat) : BitVec (n + m) ≃ (BitVec n) × (BitVec m) := by
-  apply Equiv.symm
-  refine (Equiv.prodCongr BitVec.equivFin.toEquiv BitVec.equivFin.toEquiv).trans ?_
-  refine finProdFinEquiv.trans ?_
-  have h_pow : 2^n * 2^m = 2^(n + m) := by ring
-  rw [h_pow]
-  exact BitVec.equivFin.toEquiv.symm
-
-theorem bitVec_equiv_iff_eq (n m : ℕ) : Nonempty (BitVec n ≃ BitVec m) ↔ n = m := by
-  constructor
-  · intro h
-    rcases h with ⟨equiv_inst⟩
-    have h_card := Fintype.card_congr equiv_inst
-    rw [card_bitvec n, card_bitvec m] at h_card
-    exact Nat.pow_right_injective (by norm_num) h_card
-  · intro h
-    rw [h]
-    exact Nonempty.intro (Equiv.refl _)
-
-
-/-- Equivalence between `BitVec (n+m)` and `BitVec n × BitVec m` via split/concat. -/
-def bitvec_equiv (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m :=
-  { toFun    := fun v => (v.extractLsb' m n, v.extractLsb' 0 m)
-    invFun   := fun p => p.1 ++ p.2
-    left_inv := fun v => by apply BitVec.eq_of_toNat_eq
-                            simp only [BitVec.extractLsb'_append_extractLsb']
-    right_inv := fun p => by
-      ext1
-      · simp [BitVec.extractLsb'_append_eq_left]
-      · simp [BitVec.extractLsb'_append_eq_right] }
-
-
 
 /-- The sum over `b2 : BitVec m` of `if b1 ++ b2 = c then 1 else 0`
     equals 1 iff `b1` matches the high bits of `c`, else 0. -/
@@ -202,7 +169,7 @@ lemma sum_bitvec_split (n m : ℕ) {f : BitVec (n + m) → ENNReal} :
     ∑ v : BitVec (n + m), f v = ∑ v1 : BitVec n, ∑ v2 : BitVec m, f (v1 ++ v2) := by
   have key : ∑ v : BitVec (n + m), f v =
       ∑ p : BitVec n × BitVec m, f (p.1 ++ p.2) :=
-    Fintype.sum_equiv (bitvec_equiv n m) _ _ (fun v => by simp [bitvec_equiv])
+    Fintype.sum_equiv (bv_split n m) _ _ (fun v => by simp [bv_split])
   rw [key, Fintype.sum_prod_type]
 
 /- Equivalence swapping the summation order for `BitVec (1+n)` and `BitVec (n+1)`. -/
