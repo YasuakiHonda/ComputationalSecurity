@@ -24,7 +24,7 @@ variable {n : ℕ}
 /-- Splits an `(n+1)`-bit vector into the high 1 bit (output) and the low n bits (next seed). -/
 def split_next (v : BitVec (n + 1)) : BitVec 1 × BitVec n :=
   let v_aligned : BitVec (1 + n) := v.cast (by omega)
-  let p := bitvec_equiv 1 n v_aligned
+  let p := bv_split 1 n v_aligned
   (p.1, p.2)
 
 /-- Recursively extends a 1-bit PRG `G` to L bits by collecting one output bit per step. -/
@@ -55,7 +55,7 @@ private lemma split_next_append (b : BitVec 1) (s : BitVec n) :
     split_next ((b ++ s).cast (by omega)) = (b, s) := by
   unfold split_next
   simp only [BitVec.cast_cast]
-  exact (bitvec_equiv 1 n).right_inv (b, s)
+  exact (bv_split 1 n).right_inv (b, s)
 
 end Lemmas
 
