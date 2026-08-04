@@ -69,15 +69,9 @@ lemma Pr_predict_success_eq_PrDX_one {L : ℕ} (X : PMF (BitVec L)) (i : Fin L)
   simp only [bind_assoc]
   congr; funext x
   congr; funext a
-  -- The equality reduces to proving:
-  -- (a == x.extractLsb' (L - i - 1) 1) = ((if a == x.extractLsb' (L - i - 1) 1 then 1 else 0) == 1)
-  -- Since `a == ...` is a Bool, we can just do case analysis on it (true or false).
-  cases (a == x.getLsbD (L - i - 1))
-  · simp only [Bind.bind,Bool.false_eq_true, ↓reduceIte, Fin.isValue]
-    simp only [Fin.isValue, PMF.pure_bind, Fin.reduceBEq]
-  · simp only [Bind.bind,↓reduceIte, Fin.isValue]
-    simp only [Fin.isValue, PMF.pure_bind, BEq.rfl]
-
+  simp only [beq_iff_eq, Fin.isValue, pure_bind_do]
+  congr 1
+  simp only [Fin.isValue, beq_eq_beq, ite_eq_left_iff, zero_ne_one, imp_false, Decidable.not_not]
 
 /-- Mapping a uniform `L`-bit sample to `(prefix, bit)` equals independent sampling:
     the upper `i` bits are uniform over `BitVec i`, and the selected bit is a uniform
