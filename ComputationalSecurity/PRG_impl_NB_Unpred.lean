@@ -18,14 +18,6 @@
     - pseudorandom_implies_unpredictable : (t+t_extract, ε/2)-pseudorandomness
         implies (t, ε)-next-bit unpredictability.
 
-  Key infrastructure (proved here):
-    - castEquiv       : canonical equivalence BitVec n ≃ BitVec m when n = m.
-    - tripleEquiv     : equivalence BitVec L ≃ BitVec i × BitVec 1 × BitVec (L-i-1)
-                        splitting an L-bit vector into prefix, one bit, and suffix.
-    - tripleEquiv_apply : characterizes tripleEquiv component-wise via extractLsb'/getLsbD.
-    - U_map_pre_bit   : mapping a uniform L-bit sample to (prefix, bit) equals
-                        independent sampling of the prefix and a uniform coin.
-
   Authors: Yasuaki Honda
 -/
 import ComputationalSecurity.DistInd
@@ -87,15 +79,6 @@ lemma Pr_predict_success_eq_PrDX_one {L : ℕ} (X : PMF (BitVec L)) (i : Fin L)
     simp only [Fin.isValue, PMF.pure_bind, BEq.rfl]
 
 
-/-- Canonical equivalence between `BitVec n` and `BitVec m` when `n = m`,
-    given by `BitVec.cast`. -/
-def castEquiv {n m : ℕ} (h : n = m) : BitVec n ≃ BitVec m where
-  toFun x := x.cast h
-  invFun x := x.cast h.symm
-  left_inv x := by simp
-  right_inv x := by simp
-
-
 /-- Mapping a uniform `L`-bit sample to `(prefix, bit)` equals independent sampling:
     the upper `i` bits are uniform over `BitVec i`, and the selected bit is a uniform
     coin flip, with both drawn independently.
@@ -145,23 +128,6 @@ lemma U_map_pre_bit {L : ℕ} (i : Fin L) :
         simp only [bv_to_bool]
         simp only [zero_lt_one, BitVec.getLsbD_eq_getElem, BitVec.ofNat_eq_ofNat, Equiv.coe_fn_mk]
 
-/-- For any distribution `AnyDist` over `Bool`, guessing against an independent
-    uniform coin flip succeeds with probability exactly 1/2. -/
-lemma Pr_AnyDist_eq_uniform_coin (AnyDist : PMF Bool) :
-    Pr (do
-      let a ← AnyDist
-      let x_bit ← PMF.uniformOfFintype Bool
-      PMF.pure (a == x_bit)
-    ) = 1 / 2 := by
-  unfold Pr
-  simp only [Bind.bind, PMF.bind_apply]
-  rw [tsum_bool]
-  simp only [tsum_bool]
-  simp only [PMF.uniformOfFintype_apply, Fintype.card_bool, Nat.cast_ofNat, PMF.pure_apply]
-  simp only [BEq.rfl, ↓reduceIte, mul_one, beq_true, Bool.true_eq_false, mul_zero, add_zero,
-    beq_false, Bool.not_true, zero_add, one_div]
-  rw [← add_mul, ← tsum_bool, PMF.tsum_coe, one_mul]
-
 /-- Core lemma: for the true uniform distribution `U L`, every next-bit predictor
     succeeds with probability exactly 1/2, regardless of the index `i` or algorithm `A`. -/
 lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
@@ -195,7 +161,6 @@ lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
           rw [U_map_pre_bit i]
           simp only [bind_assoc]
     _ = (Pr (do
-          -- 3. Flatten via bind_assoc to reach the form required by Pr_AnyDist_eq_uniform_coin.
           let a ← (do
             let pre ← U i
             A pre)
@@ -208,9 +173,8 @@ lemma PrDX_one_U_predictor_eq_half {L : ℕ} (i : Fin L)
           congr; funext x
           rw [PMF.bind_comm]
     _ = ((1 / 2 : ENNReal)).toReal := by
-          -- 4. Apply Pr_AnyDist_eq_uniform_coin.
           congr 1
-          exact Pr_AnyDist_eq_uniform_coin _
+          exact Pr_comparison_uniform_bit _
     _ = 1 / 2 := by norm_num
 
 

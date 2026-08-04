@@ -574,22 +574,21 @@ def bool_beq_equiv (a : Bool) : Bool ≃ Bool where
 
 /-- Probability of correctly guessing an independent uniform bit is exactly 1/2. -/
 theorem Pr_comparison_uniform_bit (AnyDist : PMF Bool) :
-    Pr (do let a ← AnyDist; let b ← PMF.uniformOfFintype Bool; PMF.pure (a == b)) = 1/2 := by
-  have h_game : (do
-    let a ← AnyDist
-    let b ← uniformOfFintype Bool
-    PMF.pure (a == b)
-  ) = PMF.uniformOfFintype Bool := by
-    have h_inner (a : Bool) : (do let b ← PMF.uniformOfFintype Bool; PMF.pure (a == b))
-                              = PMF.uniformOfFintype Bool := by
-      change (PMF.uniformOfFintype Bool).map (bool_beq_equiv a) = _
-      rw [U_map_equiv]
-    simp_rw [h_inner]
-    rw [bind_unused]
-
-  rw [h_game]
-  simp only [Pr, uniformOfFintype_apply]
-  norm_num
+    Pr (do  let a ← AnyDist
+            let b ← PMF.uniformOfFintype Bool
+            PMF.pure (a == b)) = 1/2 := by
+  calc
+    Pr (do  let a ← AnyDist;
+            let x_bit ← PMF.uniformOfFintype Bool;
+            PMF.pure (a == x_bit))
+    _ = Pr (do let a ← AnyDist; PMF.uniformOfFintype Bool) := by
+        congr 1
+        congr 1; funext a
+        change (PMF.uniformOfFintype Bool).map (bool_beq_equiv a) = _
+        rw [U_map_equiv]
+    -- The sampled `a` is now unused, so it can be dropped.
+    _ = Pr (PMF.uniformOfFintype Bool) := by rw [bind_unused]
+    _ = 1 / 2 := by simp [Pr, PMF.uniformOfFintype_apply]
 
 /-- Core identity behind the predictor-to-distinguisher conversion:
     `Pr[B succeeds] + Pr[A outputs 1 on random] = 1/2 + Pr[A outputs 1 on real]`. -/
