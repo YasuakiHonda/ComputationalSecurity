@@ -553,25 +553,12 @@ theorem unpredictability_implies_pseudorandomness {L : ℕ} {X : PMF (BitVec L)}
     rw [H_L_eq_X, H_zero_eq_U]
     exact h_adv_A
 
-  -- Wrap `H` with a ℕ-indexed version to apply `hybrid_lemma`.
-  let H_nat := fun (i : ℕ) => H X (if h : i < L + 1 then ⟨i, h⟩ else Fin.last L)
-  have h_nat_0 : H_nat 0 = H X 0 := by
-    dsimp [H_nat]
-  have h_nat_L : H_nat L = H X (Fin.last L) := by
-    dsimp [H_nat]
-    simp only [Nat.lt_succ_self, ↓reduceDIte]
-    rfl
-  have h_total_adv_nat : |PrDX_one (H_nat 0) A - PrDX_one (H_nat L) A| > ((ε * L : NNReal) : ℝ) := by
-    rw [h_nat_0, h_nat_L]
-    exact h_total_adv
-
-  have h_exists_i := hybrid_lemma H_nat L t (ε * L) hL A h_total_adv_nat
-  obtain ⟨i, hi_range, h_adv_step⟩ := h_exists_i
-  let i_fin : Fin L := ⟨i, hi_range⟩
+  -- Locate the hybrid boundary directly via the `Fin`-indexed hybrid lemma.
+  obtain ⟨i_fin, h_adv_step⟩ := hybrid_lemma_fin hL (H X) t (ε * L) A h_total_adv
 
   -- C. Construct the one-bit distinguisher `A'` via `bv_split3_i.symm`.
   let A_prime := fun (pair : BitVec i_fin × Bool) => do
-    let suf ← U (L - i - 1)
+    let suf ← U (L - i_fin - 1)
     -- convert `Bool` to `BitVec 1` via `bv_to_bool.symm`, avoiding raw bit manipulation
     let b_vec := bv_to_bool.symm pair.2
     A ((bv_split3_i i_fin).symm (pair.1, b_vec, suf))
@@ -579,28 +566,14 @@ theorem unpredictability_implies_pseudorandomness {L : ℕ} {X : PMF (BitVec L)}
   -- D. Evaluate `A'`'s advantage via `H_step_diff_eq_advantage`.
   have h_adv_A' : |advantage (X_joint X i_fin) A_prime| > (ε : ℝ) := by
     rw [← H_step_diff_eq_advantage X i_fin A]
-    have h_adv_simp : |PrDX_one (H_nat i) A - PrDX_one (H_nat (i + 1)) A| > (ε : ℝ) := by
-      norm_cast at h_adv_step
-      have : (ε * ↑L / ↑L).toReal = ↑ε := by
-        congr
-        refine mul_div_cancel_right₀ ε ?_
-        aesop
-      rw [this] at h_adv_step
-      exact h_adv_step
-
-    have h_nat_curr : H_nat i = H X i_fin.castSucc := by
-      dsimp [H_nat]
-      have h_cond : i < L + 1 := by omega
-      rw [dif_pos h_cond]
-      rfl
-    have h_nat_next : H_nat (i + 1) = H X i_fin.succ := by
-      dsimp [H_nat]
-      have h_cond : i + 1 < L + 1 := by omega
-      rw [dif_pos h_cond]
-      rfl
-    rw [h_nat_curr, h_nat_next] at h_adv_simp
     rw [abs_sub_comm]
-    exact h_adv_simp
+    norm_cast at h_adv_step
+    have h_cancel : (ε * ↑L / ↑L).toReal = ↑ε := by
+      congr
+      refine mul_div_cancel_right₀ ε ?_
+      aesop
+    rw [h_cancel] at h_adv_step
+    exact h_adv_step
 
 
   -- E. Apply the prediction lemma to obtain `B` from `A'`.
