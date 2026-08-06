@@ -112,9 +112,10 @@ lemma predictor_B_success_eq_half_plus_adv {α : Type} (X_joint : PMF (α × Boo
 
       simp_rw [h_sub]
       simp_rw [Pr_prediction_logic]
-      simp_rw [mul_add]
-      rw [ENNReal.tsum_add]
-      rw [ENNReal.tsum_mul_right, tsum_coe,one_mul]
+      have hq : Pr (uniformOfFintype Bool) = (1 / 2 : ENNReal) := by
+        simp [Pr, PMF.uniformOfFintype_apply]
+      rw [← hq]
+      exact Pr_bind_add_const X_joint (uniformOfFintype Bool) _
 
 
     -- Lift `h_enn` to `ℝ` via `toReal`, distributing the sum.
@@ -182,24 +183,16 @@ noncomputable def X_joint (X : PMF (BitVec L)) (i : Fin L) : PMF (BitVec i × Bo
 -- ============================================================
 -- 2. Hybrid distribution definition
 -- ============================================================
--- Infrastructure: `bitvecEquiv'` resolving type issues
--- ============================================================
-
-
-/-- `bv_split_i` specialized with the proof `L = i + (L - i)` baked in,
-    avoiding type errors in `H`'s definition. -/
-noncomputable def bitvecEquiv' (L : ℕ) (i : Fin (L + 1)) : BitVec L ≃ BitVec i × BitVec (L - i) := by
-  exact @bv_split_i L i
 
 /-- The hybrid distribution `H X i`: prefix `i` bits from `X`, suffix from `U L`,
-    joined via `bitvecEquiv'`. -/
+    joined via `bv_split_i`. -/
 noncomputable def H (X : PMF (BitVec L)) (i : Fin (L + 1)) : PMF (BitVec L) :=
   do
     let x ← X
     let u ← U L
-    let x_parts := bitvecEquiv' L i x
-    let u_parts := bitvecEquiv' L i u
-    PMF.pure ((bitvecEquiv' L i).symm (x_parts.1, u_parts.2))
+    let x_parts := bv_split_i i x
+    let u_parts := bv_split_i i u
+    PMF.pure ((bv_split_i i).symm (x_parts.1, u_parts.2))
 
 /-- `Pr_predict_success` (defined directly via `X`) agrees with `prediction_success_prob`
     (defined via the joint distribution `X_joint`), for the specific index `i`. -/
@@ -227,16 +220,17 @@ lemma H_zero_eq_U (X : PMF (BitVec L)) : H X 0 = U L := by
 
   calc
     (do let x ← X; let u ← U L
-        let x_parts := bitvecEquiv' L 0 x
-        let u_parts := bitvecEquiv' L 0 u
-        PMF.pure ((bitvecEquiv' L 0).symm (x_parts.1, u_parts.2)))
+        let x_parts := bv_split_i 0 x
+        let u_parts := bv_split_i 0 u
+        PMF.pure ((bv_split_i 0).symm (x_parts.1, u_parts.2)))
     -- Step 1: `x_parts.1 = u_parts.1` since `BitVec 0` is a subsingleton.
     _ = (do let x ← X; let u ← U L
-            let u_parts := bitvecEquiv' L 0 u
-            PMF.pure ((bitvecEquiv' L 0).symm (u_parts.1, u_parts.2))) := by
+            let u_parts := bv_split_i 0 u
+            PMF.pure ((bv_split_i 0).symm (u_parts.1, u_parts.2))) := by
         congr; funext x; congr; funext u
-        have h_pre : (bitvecEquiv' L 0 x).1 = (bitvecEquiv' L 0 u).1 := by
-          exact BitVec.eq_of_getMsbD_eq fun i ↦ congrFun rfl
+        have h_pre : (bv_split_i 0 x).1 = (bv_split_i 0 u).1 := by
+          simp only [Fin.coe_ofNat_eq_mod, Nat.zero_mod]
+          apply Subsingleton.elim
         simp only [h_pre]
     -- Step 2: `symm` applied to `(u_parts.1, u_parts.2)` recovers `u`.
     _ = (do let x ← X; let u ← U L; PMF.pure u) := by
@@ -258,15 +252,15 @@ lemma H_L_eq_X (X : PMF (BitVec L)) : H X (Fin.last L) = X := by
 
   calc
     (do let x ← X; let u ← U L
-        let x_parts := bitvecEquiv' L (Fin.last L) x
-        let u_parts := bitvecEquiv' L (Fin.last L) u
-        PMF.pure ((bitvecEquiv' L (Fin.last L)).symm (x_parts.1, u_parts.2)))
+        let x_parts := bv_split_i (Fin.last L) x
+        let u_parts := bv_split_i (Fin.last L) u
+        PMF.pure ((bv_split_i (Fin.last L)).symm (x_parts.1, u_parts.2)))
     -- Step 1: `u_parts.2 = x_parts.2` since the suffix `BitVec 0` is a subsingleton.
     _ = (do let x ← X; let u ← U L
-            let x_parts := bitvecEquiv' L (Fin.last L) x
-            PMF.pure ((bitvecEquiv' L (Fin.last L)).symm (x_parts.1, x_parts.2))) := by
+            let x_parts := bv_split_i (Fin.last L) x
+            PMF.pure ((bv_split_i (Fin.last L)).symm (x_parts.1, x_parts.2))) := by
         congr; funext x; congr; funext u
-        have h_suf : (bitvecEquiv' L (Fin.last L) u).2 = (bitvecEquiv' L (Fin.last L) x).2 := by
+        have h_suf : (bv_split_i (Fin.last L) u).2 = (bv_split_i (Fin.last L) x).2 := by
           simp only [Fin.val_last]
           apply Subsingleton.elim
         simp only [h_suf]

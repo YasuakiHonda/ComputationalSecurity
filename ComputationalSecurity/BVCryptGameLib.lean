@@ -542,6 +542,19 @@ lemma Pr_bind (p : PMF α) (f : α → PMF Bool) :
     Pr (p.bind f) = ∑' a, p a * Pr (f a) := by
   simp [Pr, PMF.bind_apply]
 
+/-- Linearity of expectation: a constant `Pr q` added pointwise before summing over `p`
+    equals the constant added once after summing. The only `tsum`-level fact used is
+    `ENNReal.tsum_add` (additivity of `∑'`, which has no bind/functor formulation);
+    the "constant folds away because total probability is 1" part is derived from
+    `Pr_bind` and `PMF.bind_const` rather than `tsum_mul_right`/`tsum_coe` directly. -/
+lemma Pr_bind_add_const (p : PMF α) (q : PMF Bool) (f : α → ENNReal) :
+    ∑' a, p a * (Pr q + f a) = Pr q + ∑' a, p a * f a := by
+  simp_rw [mul_add, ENNReal.tsum_add]
+  congr 1
+  have h := Pr_bind p (fun _ => q)
+  rw [PMF.bind_const] at h
+  exact h.symm
+
 /-- Pr of a PMF equals 1 minus the probability of the complemented PMF. -/
 lemma Pr_compl (p : PMF Bool) :
     Pr p = 1 - (p.bind (fun b => PMF.pure (!b))) true := by
