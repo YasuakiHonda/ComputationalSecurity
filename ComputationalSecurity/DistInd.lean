@@ -132,6 +132,41 @@ lemma hybrid_lemma
       _ ≤ (ε : ℝ) := by rw [← h_total]; exact h_sum_bound
   linarith [hDInd, h_final_bound]
 
+/-- Clamps a natural number into `Fin (L + 1)` by capping at `L`.
+    Used only internally by `hybrid_lemma_fin` to bridge to the `ℕ`-indexed
+    `hybrid_lemma`; callers never see this. -/
+private noncomputable def finOfNat (L n : ℕ) : Fin (L + 1) := ⟨min n L, by omega⟩
+
+/-- `hybrid_lemma`, specialized to `Fin (L + 1)`-indexed families.
+    This is the single place where the `ℕ ↔ Fin` bridging happens; any hybrid
+    argument over a `Fin`-indexed sequence (such as `H` in `NB_Unpred_impl_PRG`)
+    should call this directly instead of re-deriving its own `ℕ`-wrapper. -/
+lemma hybrid_lemma_fin {α : Type} {L : ℕ} (hL : L > 0)
+    (X : Fin (L + 1) → PMF α) (t : ℕ) (ε : NNReal)
+    (D : α → PMF Bit)
+    (hDInd : |PrDX_one (X 0) D - PrDX_one (X (Fin.last L)) D| > (ε : ℝ)) :
+    ∃ i : Fin L, |PrDX_one (X i.castSucc) D - PrDX_one (X i.succ) D| > (ε / L : ℝ) := by
+  set X_nat : ℕ → PMF α := fun n => X (finOfNat L n) with hX_nat
+  have h0 : X_nat 0 = X 0 := by
+    simp [hX_nat, finOfNat]
+  have hLl : X_nat L = X (Fin.last L) := by
+    simp only [hX_nat, finOfNat, min_self]
+    rfl
+  have hDInd_nat : |PrDX_one (X_nat 0) D - PrDX_one (X_nat L) D| > (ε : ℝ) := by
+    rw [h0, hLl]; exact hDInd
+  obtain ⟨i, hi_lt, hi_adv⟩ := hybrid_lemma X_nat L t ε hL D hDInd_nat
+  refine ⟨⟨i, hi_lt⟩, ?_⟩
+  have e1 : X_nat i = X (Fin.castSucc ⟨i, hi_lt⟩) := by
+    simp only [hX_nat, finOfNat]
+    congr 1
+    exact Fin.ext (Nat.min_eq_left (by omega))
+  have e2 : X_nat (i + 1) = X (Fin.succ ⟨i, hi_lt⟩) := by
+    simp only [hX_nat, finOfNat]
+    congr 1
+    exact Fin.ext (Nat.min_eq_left (by omega))
+  rw [e1, e2] at hi_adv
+  exact hi_adv
+
 /-- The transitivity property of distinguishability. -/
 theorem transitivity
     (X : ℕ → PMF α) (l : ℕ) (t : ℕ) (ε : NNReal)
