@@ -217,7 +217,6 @@ theorem indistinguishability_equivalence
           refine
             Real.arith_mean_weighted_of_constant Finset.univ (fun i ↦ (A1 i).toReal) (fun i ↦ ↑ε) ↑ε
               ?_ fun i a ↦ congrFun rfl
-          simp only
           rw [← ENNReal.toReal_sum]
           · have : ∑ x, A1 x = ∑' x, A1 x := by
               rw [tsum_eq_sum]; norm_num

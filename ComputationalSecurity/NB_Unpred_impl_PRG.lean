@@ -488,7 +488,6 @@ lemma H_step_diff_eq_advantage (X : PMF (BitVec L)) (i : Fin L) (A : BitVec L ‚Ü
               let a ‚Üê A ((bv_split3_i i).symm (x_pre, u_bit, u_suf))
               PMF.pure (a == 1)) := by
                 simp_rw [U_split3_i i, bind_assoc, pure_bind_do,Prod.mk.eta]
-                simp only [Equiv.toFun_as_coe]
                 simp only [bv_join3_i, Equiv.apply_symm_apply]
         -- 3. drop the unused `_u_pre`.
         _ = Pr (do
