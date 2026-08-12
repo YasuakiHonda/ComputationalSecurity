@@ -2,6 +2,7 @@ import Mathlib.Data.BitVec
 import Mathlib.Probability.ProbabilityMassFunction.Basic
 import Mathlib.Probability.Distributions.Uniform
 import Mathlib.Probability.ProbabilityMassFunction.Monad
+import Mathlib.Logic.Equiv.Fin.Basic
 
 /-!
 # BVCryptGameLib
@@ -76,6 +77,63 @@ def bv_split (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m where
     · simp [BitVec.extractLsb'_append_eq_right]
 
 abbrev bitvec_equiv := bv_split
+
+/-- Uniqueness of the product isomorphism: any equivalence that preserves
+    the two projections `extractLsb'` must coincide with `bv_split`. -/
+private theorem bv_split_unique (e : BitVec (n + m) ≃ BitVec n × BitVec m)
+  (h1 : ∀ v, (e v).1 = v.extractLsb' m n) (h2 : ∀ v, (e v).2 = v.extractLsb' 0 m) :
+  e = bv_split n m := by
+  ext v
+  · simp [h1, bv_split]
+  · simp [h2, bv_split]
+
+/-- The product isomorphism constructed via `Fin`.
+    `left_inv` and `right_inv` are free because it is built only from `Equiv.trans`. -/
+private def bv_split_fin (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m :=
+  calc
+    BitVec (n + m) ≃ Fin (2 ^ (n + m)) := (@BitVec.equivFin (n + m)).toEquiv
+    _ ≃ Fin (2 ^ n * 2 ^ m) := finCongr (Nat.pow_add 2 n m)
+    _ ≃ Fin (2 ^ n) × Fin (2 ^ m) := finProdFinEquiv.symm
+    _ ≃ BitVec n × BitVec m := Equiv.prodCongr
+          (RingEquiv.toEquiv (@BitVec.equivFin n).symm)
+          (RingEquiv.toEquiv (@BitVec.equivFin m).symm)
+
+
+/-- Coherence: the `Fin`-based isomorphism coincides with the `++`-based one. -/
+private theorem bv_split_fin_eq_split : bv_split_fin n m = bv_split n m := by
+  apply bv_split_unique
+  · intro v
+    apply BitVec.eq_of_toNat_eq
+    have h1 : v.toNat < 2 ^ (n + m) := v.isLt
+    have h11 : 2 ^ m * (2 ^ (n + m) / 2 ^ m) = 2 ^ (n + m) := by
+        calc 2 ^ m * (2 ^ (n + m) / 2 ^ m)
+            = 2 ^ m * (2 ^ n * 2 ^ m / 2 ^ m) := by rw [Nat.pow_add]
+          _ = 2 ^ m * 2 ^ n := by rw [Nat.mul_div_cancel _ (by positivity)]
+          _ = 2 ^ (n + m) := by rw [← Nat.pow_add, Nat.add_comm]
+    rw [← h11] at h1
+    have h2 : v.toNat / 2 ^ m < 2 ^ n := by
+      -- v < 2^n * 2^m  ->  v / 2^m < 2^n
+      calc v.toNat / 2 ^ m < 2 ^ n * 2 ^ m / 2 ^ m := by apply Nat.div_lt_of_lt_mul; rw [← Nat.pow_add]; exact h1
+        _ = 2 ^ n := by simp [Nat.mul_div_cancel]
+    calc ((bv_split_fin n m v).1).toNat
+        = (BitVec.equivFin.symm ⟨v.toNat / 2 ^ m, h2⟩).toNat := by
+            -- ここは Fin の val の計算だけなので omega で閉じる
+            simp [bv_split_fin, finProdFinEquiv, BitVec.toFin, Fin.cast, Fin.divNat]
+      _ = v.toNat / 2 ^ m := by
+            -- ここは BitVec.ofFin の toNat。環境で名前が違えば ofFin_toNat / toNat_ofFin / toNat_equivFin_symm に置換
+            simp [BitVec.equivFin]
+      _ = v.toNat / 2 ^ m % 2 ^ n := (Nat.mod_eq_of_lt h2).symm
+      _ = v.toNat >>> m % 2 ^ n := by rw [Nat.shiftRight_eq_div_pow]
+      _ = (BitVec.extractLsb' m n v).toNat := by rw [← BitVec.extractLsb'_toNat]
+
+  · intro v
+    apply BitVec.eq_of_toNat_eq
+    calc ((bv_split_fin n m v).2).toNat
+        = (BitVec.equivFin.symm ⟨v.toNat % 2 ^ m, Nat.mod_lt _ (by positivity)⟩).toNat := by
+            simp [bv_split_fin, finProdFinEquiv, BitVec.toFin, Fin.cast, Fin.modNat]
+      _ = v.toNat % 2 ^ m := by simp [BitVec.equivFin]
+      _ = (BitVec.extractLsb' 0 m v).toNat := by simp [BitVec.extractLsb'_toNat]
+
 
 /-- Splitting `BitVec L` into `BitVec i × BitVec (L - i)` for `i < L`. -/
 def bv_split_i {L : ℕ} (i : Fin (L + 1)) : BitVec L ≃ BitVec i × BitVec (L - i) := by
