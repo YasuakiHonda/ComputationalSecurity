@@ -99,38 +99,28 @@ private def bv_split_fin (n m : ℕ) : BitVec (n + m) ≃ BitVec n × BitVec m :
           (RingEquiv.toEquiv (@BitVec.equivFin m).symm)
 
 
-/-- Coherence: the `Fin`-based isomorphism coincides with the `++`-based one. -/
+/-- Coherence: the `Fin`-based isomorphism coincides with the `++`-based one.
+This is kept private as it is just for mathematical purposes and not intended for external use. -/
 private theorem bv_split_fin_eq_split : bv_split_fin n m = bv_split n m := by
   apply bv_split_unique
   · intro v
     apply BitVec.eq_of_toNat_eq
-    have h1 : v.toNat < 2 ^ (n + m) := v.isLt
-    have h11 : 2 ^ m * (2 ^ (n + m) / 2 ^ m) = 2 ^ (n + m) := by
-        calc 2 ^ m * (2 ^ (n + m) / 2 ^ m)
-            = 2 ^ m * (2 ^ n * 2 ^ m / 2 ^ m) := by rw [Nat.pow_add]
-          _ = 2 ^ m * 2 ^ n := by rw [Nat.mul_div_cancel _ (by positivity)]
-          _ = 2 ^ (n + m) := by rw [← Nat.pow_add, Nat.add_comm]
-    rw [← h11] at h1
     have h2 : v.toNat / 2 ^ m < 2 ^ n := by
-      -- v < 2^n * 2^m  ->  v / 2^m < 2^n
-      calc v.toNat / 2 ^ m < 2 ^ n * 2 ^ m / 2 ^ m := by apply Nat.div_lt_of_lt_mul; rw [← Nat.pow_add]; exact h1
-        _ = 2 ^ n := by simp [Nat.mul_div_cancel]
+      apply Nat.div_lt_of_lt_mul
+      rw [mul_comm,← Nat.pow_add]
+      exact v.isLt
     calc ((bv_split_fin n m v).1).toNat
         = (BitVec.equivFin.symm ⟨v.toNat / 2 ^ m, h2⟩).toNat := by
-            -- ここは Fin の val の計算だけなので omega で閉じる
-            simp [bv_split_fin, finProdFinEquiv, BitVec.toFin, Fin.cast, Fin.divNat]
-      _ = v.toNat / 2 ^ m := by
-            -- ここは BitVec.ofFin の toNat。環境で名前が違えば ofFin_toNat / toNat_ofFin / toNat_equivFin_symm に置換
-            simp [BitVec.equivFin]
+            simp [bv_split_fin, finProdFinEquiv, Fin.cast, Fin.divNat]
+      _ = v.toNat / 2 ^ m := by simp [BitVec.equivFin]
       _ = v.toNat / 2 ^ m % 2 ^ n := (Nat.mod_eq_of_lt h2).symm
       _ = v.toNat >>> m % 2 ^ n := by rw [Nat.shiftRight_eq_div_pow]
       _ = (BitVec.extractLsb' m n v).toNat := by rw [← BitVec.extractLsb'_toNat]
-
   · intro v
     apply BitVec.eq_of_toNat_eq
     calc ((bv_split_fin n m v).2).toNat
         = (BitVec.equivFin.symm ⟨v.toNat % 2 ^ m, Nat.mod_lt _ (by positivity)⟩).toNat := by
-            simp [bv_split_fin, finProdFinEquiv, BitVec.toFin, Fin.cast, Fin.modNat]
+            simp [bv_split_fin, finProdFinEquiv, Fin.cast, Fin.modNat]
       _ = v.toNat % 2 ^ m := by simp [BitVec.equivFin]
       _ = (BitVec.extractLsb' 0 m v).toNat := by simp [BitVec.extractLsb'_toNat]
 
